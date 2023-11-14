@@ -818,28 +818,18 @@ class Arguments(MultiValue):
         self.errors = tuple(errors)
 
 
-# TODO: Change Return to mean ReturnStatement in RF 7.0
-# - Rename current Return to ReturnSetting
-# - Rename current ReturnStatement to Return
-# - Add backwards compatible ReturnStatement alias
-# - Change Token.RETURN to mean Token.RETURN_STATEMENT
-# - Update also ModelVisitor
 @Statement.register
-class Return(MultiValue):
+class ReturnSetting(MultiValue):
     """Represents the deprecated ``[Return]`` setting.
 
-    In addition to the ``[Return]`` setting itself, also the ``Return`` node
-    in the parsing model is deprecated and :class:`ReturnSetting` (new in
-    Robot Framework 6.1) should be used instead. :class:`ReturnStatement` will
-    be renamed to ``Return`` in Robot Framework 7.0.
-
-    Eventually ``[Return]`` and ``ReturnSetting`` will be removed altogether.
+    This class was named ``Return`` prior to Robot Framework 7.0. A forward
+    compatible ``ReturnSetting`` alias existed already in Robot Framework 6.1.
     """
     type = Token.RETURN
 
     @classmethod
     def from_params(cls, args: 'Sequence[str]', indent: str = FOUR_SPACES,
-                    separator: str = FOUR_SPACES, eol: str = EOL) -> 'Return':
+                    separator: str = FOUR_SPACES, eol: str = EOL) -> 'ReturnSetting':
         tokens = [Token(Token.SEPARATOR, indent),
                   Token(Token.RETURN, '[Return]')]
         for arg in args:
@@ -847,10 +837,6 @@ class Return(MultiValue):
                            Token(Token.ARGUMENT, arg)])
         tokens.append(Token(Token.EOL, eol))
         return cls(tokens)
-
-
-# Forward compatible alias for Return.
-ReturnSetting = Return
 
 
 @Statement.register
@@ -1276,12 +1262,17 @@ class Var(Statement):
 
 
 @Statement.register
-class ReturnStatement(Statement):
+class Return(Statement):
+    """Represents the RETURN statement.
+
+    This class named ``ReturnStatement`` prior to Robot Framework 7.0.
+    The old name still exists as a backwards compatible alias.
+    """
     type = Token.RETURN_STATEMENT
 
     @classmethod
     def from_params(cls, values: 'Sequence[str]' = (), indent: str = FOUR_SPACES,
-                    separator: str = FOUR_SPACES, eol: str = EOL) -> 'ReturnStatement':
+                    separator: str = FOUR_SPACES, eol: str = EOL) -> 'Return':
         tokens = [Token(Token.SEPARATOR, indent),
                   Token(Token.RETURN_STATEMENT)]
         for value in values:
@@ -1299,6 +1290,10 @@ class ReturnStatement(Statement):
             self.errors += ('RETURN can only be used inside a user keyword.',)
         if ctx.in_finally:
             self.errors += ('RETURN cannot be used in FINALLY branch.',)
+
+
+# Backwards compatibility with RF < 7.
+ReturnStatement = Return
 
 
 class LoopControl(NoArgumentHeader, ABC):
