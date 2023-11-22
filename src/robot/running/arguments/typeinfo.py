@@ -17,13 +17,14 @@ from collections.abc import Mapping, Sequence, Set
 from datetime import date, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
-from typing import Any, Union
+from typing import Any, ForwardRef, get_type_hints, Union
 
 from robot.conf import Languages, LanguagesLike
 from robot.errors import DataError
 from robot.utils import (has_args, is_union, NOT_SET, plural_or_not as s, setter,
                          SetterAwareType, type_repr, typeddict_types)
 
+from ..context import EXECUTION_CONTEXTS
 from .customconverters import CustomArgumentConverters
 from .typeconverters import TypeConverter
 
@@ -72,7 +73,8 @@ class TypeInfo(metaclass=SetterAwareType):
     Values can be converted according to this type info by using the
     :meth:`convert` method.
 
-    Part of the public API starting from Robot Framework 7.0.
+    Part of the public API starting from Robot Framework 7.0. In such usage
+    should be imported via the :mod:`robot.api` package.
     """
     is_typed_dict = False
     __slots__ = ('name', 'type')
@@ -154,6 +156,8 @@ class TypeInfo(metaclass=SetterAwareType):
         """
         if hint is NOT_SET:
             return cls()
+        if isinstance(hint, ForwardRef):
+            hint = hint.__forward_arg__
         if isinstance(hint, typeddict_types):
             return TypedDictInfo(hint.__name__, hint)
         if is_union(hint):
@@ -261,7 +265,8 @@ class TypeInfo(metaclass=SetterAwareType):
         :param name: Name of the argument or other thing to convert.
             Used only for error reporting.
         :param custom_converters: Custom argument converters.
-        :param languages: Language configuration.
+        :param languages: Language configuration. During execution, uses the
+            current language configuration by default.
         :param kind: Type of the thing to be converted.
             Used only for error reporting.
         :raises: ``TypeError`` if there is no converter for this type or
@@ -270,7 +275,9 @@ class TypeInfo(metaclass=SetterAwareType):
         """
         if isinstance(custom_converters, dict):
             custom_converters = CustomArgumentConverters.from_dict(custom_converters)
-        if not isinstance(languages, Languages):
+        if not languages and EXECUTION_CONTEXTS.current:
+            languages = EXECUTION_CONTEXTS.current.languages
+        elif not isinstance(languages, Languages):
             languages = Languages(languages)
         converter = TypeConverter.converter_for(self, custom_converters, languages)
         if not converter:
@@ -297,7 +304,11 @@ class TypedDictInfo(TypeInfo):
 
     def __init__(self, name: str, type: type):
         super().__init__(name, type)
-        self.annotations = {n: TypeInfo.from_type_hint(t)
-                            for n, t in type.__annotations__.items()}
+        try:
+            type_hints = get_type_hints(type)
+        except Exception:
+            type_hints = type.__annotations__
+        self.annotations = {name: TypeInfo.from_type_hint(hint)
+                            for name, hint in type_hints.items()}
         # __required_keys__ is new in Python 3.9.
         self.required = getattr(type, '__required_keys__', frozenset())
