@@ -1197,7 +1197,7 @@ __ `Implicit argument types based on default values`_
           does not have a type hint. That will change conversion behavior in cases
           like `arg: list = None` where `None` conversion will not be attempted
           anymore. Library creators are strongly recommended to specify the default
-          value type explicitly like `arg: Union[list, None] = None` already now.
+          value type explicitly like `arg: list | None = None` already now.
 
 The type to use can be specified either using concrete types (e.g. list_),
 by using Abstract Base Classes (ABC) (e.g. Sequence_), or by using sub
@@ -1233,17 +1233,21 @@ Other types cause conversion failures.
    +--------------+---------------+------------+--------------+----------------------------------------------------------------+--------------------------------------+
    | int_         | Integral_     | integer,   | str_,        | Conversion is done using the int_ built-in function. Floats    | | `42`                               |
    |              |               | long       | float_       | are accepted only if they can be represented as integers       | | `-1`                               |
-   |              |               |            |              | exactly. For example, `1.0` is accepted and `1.1` is not.      | | `0xFF`                             |
-   |              |               |            |              | If converting a string to an integer fails and the type        | | `0o777`                            |
-   |              |               |            |              | is got implicitly based on a default value, conversion to      | | `0b1010`                           |
-   |              |               |            |              | float is attempted as well.                                    | | `10 000 000`                       |
-   |              |               |            |              |                                                                | | `0xBAD_C0FFEE`                     |
-   |              |               |            |              | Starting from RF 4.1, it is possible to use hexadecimal,       | | `${1}`                             |
-   |              |               |            |              | octal and binary numbers by prefixing values with              | | `${1.0}`                           |
-   |              |               |            |              | `0x`, `0o` and `0b`, respectively.                             |                                      |
+   |              |               |            |              | exactly. For example, `1.0` is accepted and `1.1` is not.      | | `10 000 000`                       |
+   |              |               |            |              | If converting a string to an integer fails and the type        | | `1e100`                            |
+   |              |               |            |              | is got implicitly based on a default value, conversion to      | | `0xFF`                             |
+   |              |               |            |              | float is attempted as well.                                    | | `0o777`                            |
+   |              |               |            |              |                                                                | | `0b1010`                           |
+   |              |               |            |              | Starting from RF 4.1, it is possible to use hexadecimal,       | | `0xBAD_C0FFEE`                     |
+   |              |               |            |              | octal and binary numbers by prefixing values with              | | `${1}`                             |
+   |              |               |            |              | `0x`, `0o` and `0b`, respectively.                             | | `${1.0}`                           |
    |              |               |            |              |                                                                |                                      |
    |              |               |            |              | Starting from RF 4.1, spaces and underscores can be used as    |                                      |
    |              |               |            |              | visual separators for digit grouping purposes.                 |                                      |
+   |              |               |            |              |                                                                |                                      |
+   |              |               |            |              | Starting from RF 7.0, strings representing floats like are     |                                      |
+   |              |               |            |              | accepted as long as their decimal part is zero. This includes  |                                      |
+   |              |               |            |              | floats using the scientific notation like `1e100`.             |                                      |
    +--------------+---------------+------------+--------------+----------------------------------------------------------------+--------------------------------------+
    | float_       | Real_         | double     | str_,        | Conversion is done using the float_ built-in.                  | | `3.14`                             |
    |              |               |            | Real_        |                                                                | | `2.9979e8`                         |
@@ -2657,6 +2661,32 @@ __ `List variables`_
        Should Be Equal    ${s1} ${s2}    a list
        Should Be Equal    @{li}[0] @{li}[1]    of strings
 
+Detecting is Robot Framework running
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Starting from Robot Framework 6.1, it is easy to detect is Robot Framework
+running at all and is the dry-run mode active by using the `robot_running`
+and `dry_run_active` properties of the BuiltIn library. A relatively common
+use case is that library initializers may want to avoid doing some work if
+the library is not used during execution but is initialized, for example,
+by Libdoc_:
+
+.. sourcecode:: python
+
+   from robot.libraries.BuiltIn import BuiltIn
+
+
+   class MyLibrary:
+
+       def __init__(self):
+           builtin = BuiltIn()
+           if builtin.robot_running and not builtin.dry_run_active:
+               # Do some initialization that only makes sense during real execution.
+
+For more information about using the BuiltIn library as a programmatic API,
+including another example using `robot_running`, see the `Using BuiltIn library`_
+section.
+
 Communication when using threads
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -3508,13 +3538,18 @@ using `set_test_variable`, `set_suite_variable` and
 
 
    def do_something(argument):
+       builtin = BuiltIn()
        output = do_something_that_creates_a_lot_of_output(argument)
-       outputdir = BuiltIn().replace_variables('${OUTPUTDIR}')
-       path = os.path.join(outputdir, 'results.txt')
-       f = open(path, 'w')
-       f.write(output)
-       f.close()
-       print('*HTML* Output written to <a href="results.txt">results.txt</a>')
+       if builtin.robot_running:
+           output_dir = builtin.replace_variables('${OUTPUT_DIR}')
+       else:
+           output_dir = '.'
+       with open(os.path.join(output_dir, 'output.txt'), 'w') as file:
+           file.write(output)
+       print('*HTML* Output written to <a href="output.txt">output.txt</a>')
+
+As the above examples illustrates, BuiltIn also has a convenient `robot_running`
+property for `detecting is Robot Framework running`_.
 
 The only catch with using methods from `BuiltIn` is that all
 `run_keyword` method variants must be handled specially.

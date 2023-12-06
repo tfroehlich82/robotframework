@@ -14,6 +14,7 @@
 #  limitations under the License.
 
 import os.path
+from abc import ABC
 
 from robot.errors import DataError, TimeoutError
 from robot.model import BodyItem
@@ -30,7 +31,46 @@ class Listeners(LoggerApi):
 
     def __init__(self, listeners=(), log_level='INFO'):
         self._is_logged = IsLogged(log_level)
-        self._listeners = import_listeners(listeners) if listeners else []
+        self._listeners = self._import_listeners(listeners)
+
+    def _import_listeners(self, listeners, library=None) -> 'list[ListenerFacade]':
+        imported = []
+        for listener_source in listeners:
+            try:
+                listener = self._import_listener(listener_source, library)
+            except DataError as err:
+                name = listener_source \
+                    if isinstance(listener_source, str) else type_name(listener_source)
+                msg = f"Taking listener '{name}' into use failed: {err}"
+                if library:
+                    raise DataError(msg)
+                LOGGER.error(msg)
+            else:
+                imported.append(listener)
+        return imported
+
+    def _import_listener(self, listener, library=None) -> 'ListenerFacade':
+        if isinstance(listener, str):
+            name, args = split_args_from_name_or_path(listener)
+            importer = Importer('listener', logger=LOGGER)
+            listener = importer.import_class_or_module(os.path.normpath(name),
+                                                       instantiate_with_args=args)
+        else:
+            # Modules have `__name__`, with others better to use `type_name`.
+            name = getattr(listener, '__name__', None) or type_name(listener)
+        if self._get_version(listener) == 2:
+            return ListenerV2Facade(listener, name, library)
+        return ListenerV3Facade(listener, name, library)
+
+    def _get_version(self, listener):
+        version = getattr(listener, 'ROBOT_LISTENER_API_VERSION', 3)
+        try:
+            version = int(version)
+            if version not in (2, 3):
+                raise ValueError
+        except (ValueError, TypeError):
+            raise DataError(f"Unsupported API version '{version}'.")
+        return version
 
     # Must be property to allow LibraryListeners to override it.
     @property
@@ -60,6 +100,14 @@ class Listeners(LoggerApi):
     def end_keyword(self, data, result):
         for listener in self.listeners:
             listener.end_keyword(data, result)
+
+    def start_user_keyword(self, data, implementation, result):
+        for listener in self.listeners:
+            listener.start_user_keyword(data, implementation, result)
+
+    def end_user_keyword(self, data, implementation, result):
+        for listener in self.listeners:
+            listener.end_user_keyword(data, implementation, result)
 
     def start_for(self, data, result):
         for listener in self.listeners:
@@ -93,6 +141,14 @@ class Listeners(LoggerApi):
         for listener in self.listeners:
             listener.end_while_iteration(data, result)
 
+    def start_if(self, data, result):
+        for listener in self.listeners:
+            listener.start_if(data, result)
+
+    def end_if(self, data, result):
+        for listener in self.listeners:
+            listener.end_if(data, result)
+
     def start_if_branch(self, data, result):
         for listener in self.listeners:
             listener.start_if_branch(data, result)
@@ -100,6 +156,14 @@ class Listeners(LoggerApi):
     def end_if_branch(self, data, result):
         for listener in self.listeners:
             listener.end_if_branch(data, result)
+
+    def start_try(self, data, result):
+        for listener in self.listeners:
+            listener.start_try(data, result)
+
+    def end_try(self, data, result):
+        for listener in self.listeners:
+            listener.end_try(data, result)
 
     def start_try_branch(self, data, result):
         for listener in self.listeners:
@@ -194,7 +258,7 @@ class LibraryListeners(Listeners):
         self._listeners.pop()
 
     def register(self, listeners, library):
-        listeners = import_listeners(listeners, library=library)
+        listeners = self._import_listeners(listeners, library=library)
         self._listeners[-1].extend(listeners)
 
     def close(self):
@@ -210,49 +274,22 @@ class LibraryListeners(Listeners):
         self._listeners[-1] = remaining
 
 
-class ListenerFacade(LoggerApi):
+class ListenerFacade(LoggerApi, ABC):
 
     def __init__(self, listener, name, library=None):
         self.listener = listener
         self.name = name
         self.library = library
-        self._start_suite = self._get_method(listener, 'start_suite')
-        self._end_suite = self._get_method(listener, 'end_suite')
-        self._start_test = self._get_method(listener, 'start_test')
-        self._end_test = self._get_method(listener, 'end_test')
-        self._log_message = self._get_method(listener, 'log_message')
-        self._message = self._get_method(listener, 'message')
-        self._close = self._get_method(listener, 'close')
-
-    def start_suite(self, data, result):
-        self._start_suite(data, result)
-
-    def end_suite(self, data, result):
-        self._end_suite(data, result)
-
-    def start_test(self, data, result):
-        self._start_test(data, result)
-
-    def end_test(self, data, result):
-        self._end_test(data, result)
-
-    def log_message(self, message):
-        self._log_message(message)
-
-    def message(self, message):
-        self._message(message)
 
     def output_file(self, type_: str, path: str):
-        method = self._get_method(self.listener, f'{type_.lower()}_file')
+        method = self._get_method(f'{type_.lower()}_file')
         method(path)
 
-    def close(self):
-        self._close()
-
-    def _get_method(self, listener, name):
+    def _get_method(self, name):
         for method_name in self._get_method_names(name):
-            if hasattr(listener, method_name):
-                return ListenerMethod(getattr(listener, method_name), self.name)
+            method = getattr(self.listener, method_name, None)
+            if method:
+                return ListenerMethod(method, self.name)
         return ListenerMethod(None, self.name)
 
     def _get_method_names(self, name):
@@ -266,15 +303,96 @@ class ListenerFacade(LoggerApi):
         return ''.join([first] + [part.capitalize() for part in rest])
 
 
+class ListenerV3Facade(ListenerFacade):
+
+    def __init__(self, listener, name, library=None):
+        super().__init__(listener, name, library)
+        # Suite
+        self.start_suite = self._get_method('start_suite')
+        self.end_suite = self._get_method('end_suite')
+        # Test
+        self.start_test = self._get_method('start_test')
+        self.end_test = self._get_method('end_test')
+        # Keywords
+        self.start_keyword = self._get_method('start_keyword')
+        self.end_keyword = self._get_method('end_keyword')
+        self._start_user_keyword = self._get_method('start_user_keyword')
+        self._end_user_keyword = self._get_method('end_user_keyword')
+        # IF
+        self.start_if = self._get_method('start_if')
+        self.end_if = self._get_method('end_if')
+        self.start_if_branch = self._get_method('start_if_branch')
+        self.end_if_branch = self._get_method('end_if_branch')
+        # TRY
+        self.start_try = self._get_method('start_try')
+        self.end_try = self._get_method('end_try')
+        self.start_try_branch = self._get_method('start_try_branch')
+        self.end_try_branch = self._get_method('end_try_branch')
+        # FOR
+        self.start_for = self._get_method('start_for')
+        self.end_for = self._get_method('end_for')
+        self.start_for_iteration = self._get_method('start_for_iteration')
+        self.end_for_iteration = self._get_method('end_for_iteration')
+        # WHILE
+        self.start_while = self._get_method('start_while')
+        self.end_while = self._get_method('end_while')
+        self.start_while_iteration = self._get_method('start_while_iteration')
+        self.end_while_iteration = self._get_method('end_while_iteration')
+        # VAR
+        self.start_var = self._get_method('start_var')
+        self.end_var = self._get_method('end_var')
+        # BREAK
+        self.start_break = self._get_method('start_break')
+        self.end_break = self._get_method('end_break')
+        # CONTINUE
+        self.start_continue = self._get_method('start_continue')
+        self.end_continue = self._get_method('end_continue')
+        # RETURN
+        self.start_return = self._get_method('start_return')
+        self.end_return = self._get_method('end_return')
+        # ERROR
+        self.start_error = self._get_method('start_error')
+        self.end_error = self._get_method('end_error')
+        # Messages
+        self.log_message = self._get_method('log_message')
+        self.message = self._get_method('message')
+        # Close
+        self.close = self._get_method('close')
+
+    def start_user_keyword(self, data, implementation, result):
+        if self._start_user_keyword:
+            self._start_user_keyword(data, implementation, result)
+        else:
+            self.start_keyword(data, result)
+
+    def end_user_keyword(self, data, implementation, result):
+        if self._end_user_keyword:
+            self._end_user_keyword(data, implementation, result)
+        else:
+            self.end_keyword(data, result)
+
+
 class ListenerV2Facade(ListenerFacade):
 
     def __init__(self, listener, name, library=None):
         super().__init__(listener, name, library)
-        self._start_kw = self._get_method(listener, 'start_keyword')
-        self._end_kw = self._get_method(listener, 'end_keyword')
+        # Suite
+        self._start_suite = self._get_method('start_suite')
+        self._end_suite = self._get_method('end_suite')
+        # Test
+        self._start_test = self._get_method('start_test')
+        self._end_test = self._get_method('end_test')
+        # Keyword and control structures
+        self._start_kw = self._get_method('start_keyword')
+        self._end_kw = self._get_method('end_keyword')
+        # Messages
+        self._log_message = self._get_method('log_message')
+        self._message = self._get_method('message')
+        # Close
+        self._close = self._get_method('close')
 
     def imported(self, import_type: str, name: str, attrs):
-        method = self._get_method(self.listener, f'{import_type.lower()}_import')
+        method = self._get_method(f'{import_type.lower()}_import')
         method(name, attrs)
 
     def start_suite(self, data, result):
@@ -293,8 +411,7 @@ class ListenerV2Facade(ListenerFacade):
         self._start_kw(result.full_name, self._keyword_attrs(data, result))
 
     def end_keyword(self, data, result):
-        self._end_kw(result.full_name,
-                     self._keyword_attrs(data, result, end=True))
+        self._end_kw(result.full_name, self._keyword_attrs(data, result, end=True))
 
     def start_for(self, data, result):
         extra = self._for_extra_attrs(result)
@@ -510,51 +627,8 @@ class ListenerV2Facade(ListenerFacade):
                  'html': 'yes' if msg.html else 'no'}
         return attrs
 
-
-def import_listener(listener):
-    if not isinstance(listener, str):
-        # Modules have `__name__`, with others better to use `type_name`.
-        name = getattr(listener, '__name__', None) or type_name(listener)
-        return listener, name
-    name, args = split_args_from_name_or_path(listener)
-    importer = Importer('listener', logger=LOGGER)
-    listener = importer.import_class_or_module(os.path.normpath(name),
-                                               instantiate_with_args=args)
-    return listener, name
-
-
-def get_version(listener, name):
-    try:
-        version = int(listener.ROBOT_LISTENER_API_VERSION)
-        if version not in (2, 3):
-            raise ValueError
-    except AttributeError:
-        raise DataError(f"Listener '{name}' does not have mandatory "
-                        f"'ROBOT_LISTENER_API_VERSION' attribute.")
-    except (ValueError, TypeError):
-        raise DataError(f"Listener '{name}' uses unsupported API version "
-                        f"'{listener.ROBOT_LISTENER_API_VERSION}'.")
-    return version
-
-
-def import_listeners(listeners, library=None):
-    imported = []
-    for listener_source in listeners:
-        try:
-            listener, name = import_listener(listener_source)
-            version = get_version(listener, name)
-            if version == 2:
-                imported.append(ListenerV2Facade(listener, name, library))
-            else:
-                imported.append(ListenerFacade(listener, name, library))
-        except DataError as err:
-            name = listener_source \
-                    if isinstance(listener_source, str) else type_name(listener_source)
-            msg = f"Taking listener '{name}' into use failed: {err}"
-            if library:
-                raise DataError(msg)
-            LOGGER.error(msg)
-    return imported
+    def close(self):
+        self._close()
 
 
 class ListenerMethod:
@@ -584,3 +658,6 @@ class ListenerMethod:
             LOGGER.info(f"Details:\n{details}")
         finally:
             ListenerMethod.called = False
+
+    def __bool__(self):
+        return self.method is not None

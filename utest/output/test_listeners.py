@@ -4,7 +4,7 @@ from robot.model import BodyItem
 from robot.output.listeners import Listeners, LibraryListeners
 from robot.output import LOGGER
 from robot.running.outputcapture import OutputCapturer
-from robot.utils.asserts import assert_equal, assert_raises
+from robot.utils.asserts import assert_equal
 from robot.utils import DotDict
 
 
@@ -167,28 +167,6 @@ class TestListeners(unittest.TestCase):
         stdout, stderr = self.capturer._release()
         assert_equal(stderr, '')
         assert_equal(stdout.rstrip(), expected)
-
-
-class TestAttributesAreNotAccessedUnnecessarily(unittest.TestCase):
-
-    def test_start_and_end_methods(self):
-        class ModelStub:
-            IF_ELSE_ROOT = 'IF/ELSE ROOT'
-            TRY_EXCEPT_ROOT = 'TRY/EXCEPT ROOT'
-            type = 'xxx'
-        for listeners in [Listeners([]), LibraryListeners()]:
-            for name in dir(listeners):
-                if name.startswith(('start_', 'end_')):
-                    model = ModelStub() if name.endswith('keyword') else None
-                    method = getattr(listeners, name)
-                    method(model, model)
-
-    def test_message_methods(self):
-        class Message:
-            level = 'INFO'
-        for listeners in [Listeners([]), LibraryListeners()]:
-            listeners.log_message(Message)
-            listeners.message(Message)
 
 
 if __name__ == '__main__':

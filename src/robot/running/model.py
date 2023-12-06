@@ -41,16 +41,18 @@ from typing import Any, Literal, Mapping, Sequence, TYPE_CHECKING, Union
 from robot import model
 from robot.conf import RobotSettings
 from robot.errors import BreakLoop, ContinueLoop, DataError, ReturnFromKeyword, VariableError
-from robot.model import BodyItem, create_fixture, DataDict, ModelObject, TestSuites
+from robot.model import BodyItem, create_fixture, DataDict, ModelObject, Tags, TestSuites
 from robot.output import LOGGER, Output, pyloggingconf
 from robot.result import (Break as BreakResult, Continue as ContinueResult,
                           Error as ErrorResult, Return as ReturnResult, Var as VarResult)
-from robot.utils import setter
+from robot.utils import eq, getshortdoc, normalize, NOT_SET, setter
 from robot.variables import VariableResolver
 
+from .arguments import ArgumentSpec, EmbeddedArguments, UserKeywordArgumentParser
 from .bodyrunner import ForRunner, IfRunner, KeywordRunner, TryRunner, WhileRunner
 from .randomizer import Randomizer
 from .statusreporter import StatusReporter
+from .userkeywordrunner import UserKeywordRunner, EmbeddedArgumentsRunner
 
 if TYPE_CHECKING:
     from robot.parsing import File
@@ -486,13 +488,13 @@ class TestSuite(model.TestSuite[Keyword, TestCase]):
         #: :class:`ResourceFile` instance containing imports, variables and
         #: keywords the suite owns. When data is parsed from the file system,
         #: this data comes from the same test case file that creates the suite.
-        self.resource = ResourceFile(parent=self)
+        self.resource = ResourceFile(owner=self)
 
     @setter
     def resource(self, resource: 'ResourceFile|dict') -> 'ResourceFile':
         if isinstance(resource, dict):
             resource = ResourceFile.from_dict(resource)
-            resource.parent = self
+            resource.owner = self
         return resource
 
     @classmethod
@@ -683,19 +685,19 @@ class Variable(ModelObject):
     def __init__(self, name: str = '',
                  value: Sequence[str] = (),
                  separator: 'str|None' = None,
-                 parent: 'ResourceFile|None' = None,
+                 owner: 'ResourceFile|None' = None,
                  lineno: 'int|None' = None,
                  error: 'str|None' = None):
         self.name = name
         self.value = tuple(value)
         self.separator = separator
-        self.parent = parent
+        self.owner = owner
         self.lineno = lineno
         self.error = error
 
     @property
     def source(self) -> 'Path|None':
-        return self.parent.source if self.parent is not None else None
+        return self.owner.source if self.owner is not None else None
 
     def report_error(self, message: str, level: str = 'ERROR'):
         source = self.source or '<unknown>'
@@ -714,13 +716,13 @@ class Variable(ModelObject):
 
 class ResourceFile(ModelObject):
     repr_args = ('source',)
-    __slots__ = ('_source', 'parent', 'doc')
+    __slots__ = ('_source', 'owner', 'doc')
 
     def __init__(self, source: 'Path|str|None' = None,
-                 parent: 'TestSuite|None' = None,
+                 owner: 'TestSuite|None' = None,
                  doc: str = ''):
         self.source = source
-        self.parent = parent
+        self.owner = owner    # FIXME: Should this be 'parent' instead?
         self.doc = doc
         self.imports = []
         self.variables = []
@@ -730,8 +732,8 @@ class ResourceFile(ModelObject):
     def source(self) -> 'Path|None':
         if self._source:
             return self._source
-        if self.parent:
-            return self.parent.source
+        if self.owner:
+            return self.owner.source
         return None
 
     @source.setter
@@ -739,6 +741,17 @@ class ResourceFile(ModelObject):
         if isinstance(source, str):
             source = Path(source)
         self._source = source
+
+    @property
+    def name(self) -> 'str|None':
+        """Resource file name.
+
+        ``None`` if resource file is part of a suite or if it does not have
+        :attr:`source`, name of the source file without the extension otherwise.
+        """
+        if self.owner or not self.source:
+            return None
+        return self.source.stem
 
     @setter
     def imports(self, imports: Sequence['Import']) -> 'Imports':
@@ -796,6 +809,19 @@ class ResourceFile(ModelObject):
         from .builder import RobotParser
         return RobotParser().parse_resource_model(model)
 
+    def find_keywords(self, name: str,
+                      include_embedded: bool = True) -> 'list[UserKeyword]':
+        keywords = []
+        norm_name = normalize(name, ignore='_')
+        for kw in self.keywords:
+            if kw.embedded:
+                if include_embedded and kw.matches(name):
+                    keywords.append(kw)
+            else:
+                if normalize(kw.name, ignore='_') == norm_name:
+                    keywords.append(kw)
+        return keywords
+
     def to_dict(self) -> DataDict:
         data = {}
         if self._source:
@@ -814,28 +840,73 @@ class ResourceFile(ModelObject):
 class UserKeyword(ModelObject):
     repr_args = ('name', 'args')
     fixture_class = Keyword
-    __slots__ = ['name', 'args', 'doc', 'timeout', 'lineno', 'parent', 'error',
+    __slots__ = ['embedded', 'doc', 'timeout', 'lineno', 'owner', 'parent', 'error',
                  '_setup', '_teardown']
 
     def __init__(self, name: str = '',
-                 args: Sequence[str] = (),
+                 args: 'ArgumentSpec|Sequence[str]' = (),
                  doc: str = '',
-                 tags: Sequence[str] = (),
+                 tags: 'Tags|Sequence[str]' = (),
                  timeout: 'str|None' = None,
                  lineno: 'int|None' = None,
-                 parent: 'ResourceFile|None' = None,
+                 owner: 'ResourceFile|None' = None,
+                 parent: 'BodyItemParent|None' = None,
                  error: 'str|None' = None):
+        self.embedded: EmbeddedArguments | None = None
         self.name = name
-        self.args = tuple(args)
+        self.args = args
         self.doc = doc
         self.tags = tags
         self.timeout = timeout
         self.lineno = lineno
+        self.owner = owner
         self.parent = parent
         self.error = error
         self.body = []
         self._setup = None
         self._teardown = None
+
+    # FIXME: Decide between `args`, `arguments` and `parameters`.
+    @property
+    def arguments(self):
+        return self.args
+
+    @setter
+    def name(self, name: str) -> str:
+        self.embedded = EmbeddedArguments.from_name(name)
+        return name
+
+    @property
+    def full_name(self):
+        if self.owner and self.owner.name:
+            return f'{self.owner.name}.{self.name}'
+        return self.name
+
+    @setter
+    def args(self, spec: 'ArgumentSpec|Sequence[str]') -> ArgumentSpec:
+        if isinstance(spec, ArgumentSpec):
+            # FIXME: ArgumentSpec should be copied here!
+            pass
+        else:
+            spec = UserKeywordArgumentParser().parse(spec)
+        spec.name = lambda: self.full_name
+        return spec
+
+    @property
+    def short_doc(self):
+        return getshortdoc(self.doc)
+
+    @setter
+    def tags(self, tags: 'Tags|Sequence[str]') -> Tags:
+        return Tags(tags)
+
+    @property
+    def private(self):
+        return bool(self.tags and self.tags.robot('private'))
+
+    @property
+    def source(self) -> 'Path|None':
+        return self.owner.source if self.owner is not None else None
 
     @setter
     def body(self, body: 'Sequence[BodyItem|DataDict]') -> Body:
@@ -887,17 +958,33 @@ class UserKeyword(ModelObject):
         """
         return bool(self._teardown)
 
-    @setter
-    def tags(self, tags: Sequence[str]) -> model.Tags:
-        return model.Tags(tags)
+    def matches(self, name: str) -> bool:
+        if self.embedded:
+            return self.embedded.match(name)
+        return eq(self.name, name, ignore='_')
 
-    @property
-    def source(self) -> 'Path|None':
-        return self.parent.source if self.parent is not None else None
+    def create_runner(self, name, languages=None):
+        if self.embedded:
+            return EmbeddedArgumentsRunner(self, name)
+        return UserKeywordRunner(self)
+
+    def bind(self, data: Keyword) -> 'UserKeyword':
+        kw = UserKeyword('', self.args, self.doc, self.tags, self.timeout,
+                         self.lineno, self.owner, data.parent, self.error)
+        # Avoid possible errors setting name with invalid embedded args.
+        # FIXME: `self.embedded` should be copied.
+        kw._setter__name = self.name
+        kw.embedded = self.embedded
+        if self.has_setup:
+            kw.setup = self.setup.to_dict()
+        if self.has_teardown:
+            kw.teardown = self.teardown.to_dict()
+        kw.body = self.body.to_dicts()
+        return kw
 
     def to_dict(self) -> DataDict:
         data: DataDict = {'name': self.name}
-        for name, value in [('args', self.args),
+        for name, value in [('args', tuple(self._decorate_args())),
                             ('doc', self.doc),
                             ('tags', tuple(self.tags)),
                             ('timeout', self.timeout),
@@ -912,6 +999,29 @@ class UserKeyword(ModelObject):
             data['teardown'] = self.teardown.to_dict()
         return data
 
+    def _decorate_args(self):
+        args = []
+        for info in self.args:
+            if info.kind == info.VAR_NAMED:
+                deco = '&'
+            elif info.kind in (info.VAR_POSITIONAL, info.NAMED_ONLY_MARKER):
+                deco = '@'
+            else:
+                deco = '$'
+            arg = f'{deco}{{{info.name}}}'
+            if info.default is not NOT_SET:
+                arg = f'{arg}={info.default}'
+            args.append(arg)
+        return args
+
+    def _include_in_repr(self, name: str, value: Any) -> bool:
+        return name == 'name' or value
+
+    def _repr_format(self, name: str, value: Any) -> str:
+        if name == 'args':
+            return repr(self._decorate_args())
+        return super()._repr_format(name, value)
+
 
 class Import(ModelObject):
     repr_args = ('type', 'name', 'args', 'alias')
@@ -923,7 +1033,7 @@ class Import(ModelObject):
                  name: str,
                  args: Sequence[str] = (),
                  alias: 'str|None' = None,
-                 parent: 'ResourceFile|None' = None,
+                 owner: 'ResourceFile|None' = None,
                  lineno: 'int|None' = None):
         if type not in (self.LIBRARY, self.RESOURCE, self.VARIABLES):
             raise ValueError(f"Invalid import type: Expected '{self.LIBRARY}', "
@@ -932,12 +1042,12 @@ class Import(ModelObject):
         self.name = name
         self.args = tuple(args)
         self.alias = alias
-        self.parent = parent
+        self.owner = owner
         self.lineno = lineno
 
     @property
     def source(self) -> 'Path|None':
-        return self.parent.source if self.parent is not None else None
+        return self.owner.source if self.owner is not None else None
 
     @property
     def directory(self) -> 'Path|None':
@@ -978,8 +1088,8 @@ class Import(ModelObject):
 
 class Imports(model.ItemList):
 
-    def __init__(self, parent: ResourceFile, imports: Sequence[Import] = ()):
-        super().__init__(Import, {'parent': parent}, items=imports)
+    def __init__(self, owner: ResourceFile, imports: Sequence[Import] = ()):
+        super().__init__(Import, {'owner': owner}, items=imports)
 
     def library(self, name: str, args: Sequence[str] = (), alias: 'str|None' = None,
                 lineno: 'int|None' = None) -> Import:
@@ -1011,11 +1121,11 @@ class Imports(model.ItemList):
 
 class Variables(model.ItemList[Variable]):
 
-    def __init__(self, parent: ResourceFile, variables: Sequence[Variable] = ()):
-        super().__init__(Variable, {'parent': parent}, items=variables)
+    def __init__(self, owner: ResourceFile, variables: Sequence[Variable] = ()):
+        super().__init__(Variable, {'owner': owner}, items=variables)
 
 
 class UserKeywords(model.ItemList[UserKeyword]):
 
-    def __init__(self, parent: ResourceFile, keywords: Sequence[UserKeyword] = ()):
-        super().__init__(UserKeyword, {'parent': parent}, items=keywords)
+    def __init__(self, owner: ResourceFile, keywords: Sequence[UserKeyword] = ()):
+        super().__init__(UserKeyword, {'owner': owner}, items=keywords)
