@@ -25,7 +25,6 @@ from robot.errors import (BreakLoop, ContinueLoop, DataError, ExecutionFailed,
                           ReturnFromKeyword, VariableError)
 from robot.running import Keyword, RUN_KW_REGISTER
 from robot.running.context import EXECUTION_CONTEXTS
-from robot.running.usererrorhandler import UserErrorHandler
 from robot.utils import (DotDict, escape, format_assign_message, get_error_message,
                          get_time, html_escape, is_falsy, is_integer, is_list_like,
                          is_string, is_truthy, Matcher, normalize,
@@ -2344,7 +2343,7 @@ class _RunKeyword(_BuiltInBase):
         ``5 times``, ``10 x``). ``retry_interval`` must always be given in
         Robot Framework's time format.
 
-        By default ``retry_interval`` is the time to wait _after_ a keyword has
+        By default, ``retry_interval`` is the time to wait _after_ a keyword has
         failed. For example, if the first run takes 2 seconds and the retry
         interval is 3 seconds, the second run starts 5 seconds after the first
         run started. If ``retry_interval`` start with prefix ``strict:``, the
@@ -2368,7 +2367,7 @@ class _RunKeyword(_BuiltInBase):
         Running the same keyword multiple times inside this keyword can create
         lots of output and considerably increase the size of the generated
         output files. It is possible to remove unnecessary keywords from
-        the outputs using ``--RemoveKeywords WUKS`` command line option.
+        the outputs using the ``--remove-keywords WUKS`` command line option.
 
         Support for "strict" retry interval is new in Robot Framework 4.1.
         """
@@ -2398,6 +2397,7 @@ class _RunKeyword(_BuiltInBase):
                     raise
                 count -= 1
                 if time.time() > maxtime > 0 or count == 0:
+                    name = self._variables.replace_scalar(name)
                     raise AssertionError(f"Keyword '{name}' failed after retrying "
                                          f"{message}. The last error was: {err}")
             finally:
@@ -3178,8 +3178,8 @@ class _Misc(_BuiltInBase):
         the library. The latter is especially useful if the library itself
         calls this keyword as a method.
         """
-        library = self._namespace.reload_library(name_or_instance)
-        self.log(f'Reloaded library {library.name} with {len(library)} keywords.')
+        lib = self._namespace.reload_library(name_or_instance)
+        self.log(f'Reloaded library {lib.name} with {len(lib.keywords)} keywords.')
 
     @run_keyword_variant(resolve=0)
     def import_library(self, name, *args):
@@ -3318,20 +3318,12 @@ class _Misc(_BuiltInBase):
 
         See also `Variable Should Exist`.
         """
-        error = None
         try:
-            runner = self._namespace.get_runner(name, recommend_on_failure=False)
+            kw = self._namespace.get_runner(name, recommend_on_failure=False).keyword
+            if kw.error:
+                raise DataError(kw.error)
         except DataError as err:
-            error = err.message
-            raise AssertionError(msg or error.message)
-        else:
-            # FIXME: Unify reporting errors.
-            if isinstance(runner, UserErrorHandler):
-                error = runner.error.message
-            elif getattr(runner, 'error', None) is not None:
-                error = runner.error
-        if error is not None:
-            raise AssertionError(msg or error)
+            raise AssertionError(msg or err.message)
 
     def get_time(self, format='timestamp', time_='NOW'):
         """Returns the given time in the requested format.

@@ -26,9 +26,9 @@ from robot.utils import (eq, find_file, is_string, normalize, RecommendationFind
 
 from .context import EXECUTION_CONTEXTS
 from .importer import ImportCache, Importer
-from .model import Import
+from .invalidkeyword import InvalidKeyword
+from .resourcemodel import Import
 from .runkwregister import RUN_KW_REGISTER
-from .usererrorhandler import UserErrorHandler
 
 
 IMPORTER = Importer()
@@ -133,13 +133,13 @@ class Namespace:
         if notify:
             LOGGER.imported("Library", lib.name,
                             args=list(import_setting.args),
-                            originalname=lib.orig_name,
+                            originalname=lib.real_name,
                             importer=str(import_setting.source),
-                            source=lib.source)
+                            source=str(lib.source or ''))
         self._kw_store.libraries[lib.name] = lib
-        lib.start_suite()
+        lib.scope_manager.start_suite()
         if self._running_test:
-            lib.start_test()
+            lib.scope_manager.start_test()
 
     def _resolve_name(self, setting):
         name = setting.name
@@ -178,12 +178,12 @@ class Namespace:
         self._running_test = True
         self.variables.start_test()
         for lib in self.libraries:
-            lib.start_test()
+            lib.scope_manager.start_test()
 
     def end_test(self):
         self.variables.end_test()
         for lib in self.libraries:
-            lib.end_test()
+            lib.scope_manager.end_test()
         self._running_test = True
 
     def start_suite(self):
@@ -191,7 +191,7 @@ class Namespace:
 
     def end_suite(self, suite):
         for lib in self.libraries:
-            lib.end_suite()
+            lib.scope_manager.end_suite()
         if not suite.parent:
             IMPORTER.close_global_library_listeners()
         self.variables.end_suite()
@@ -203,22 +203,22 @@ class Namespace:
         self.variables.end_keyword()
 
     def get_library_instance(self, name):
-        return self._kw_store.get_library(name).get_instance()
+        return self._kw_store.get_library(name).instance
 
     def get_library_instances(self):
-        return dict((name, lib.get_instance())
+        return dict((name, lib.instance)
                     for name, lib in self._kw_store.libraries.items())
 
     def reload_library(self, name_or_instance):
         library = self._kw_store.get_library(name_or_instance)
-        library.reload()
+        library.create_keywords()
         return library
 
     def get_runner(self, name, recommend_on_failure=True):
         try:
             return self._kw_store.get_runner(name, recommend_on_failure)
-        except DataError as error:
-            return UserErrorHandler(error, name)
+        except DataError as err:
+            return InvalidKeyword(str(name), error=str(err)).create_runner(name)
 
 
 class KeywordStore:
@@ -252,7 +252,7 @@ class KeywordStore:
 
     def _get_lib_by_instance(self, instance):
         for lib in self.libraries.values():
-            if lib.get_instance(create=False) is instance:
+            if lib._instance is instance:
                 return lib
         self._no_library_found(instance)
 
@@ -285,9 +285,9 @@ class KeywordStore:
 
     def _get_runner(self, name):
         if not name:
-            raise DataError('Keyword name cannot be empty.', syntax=True)
+            raise DataError('Keyword name cannot be empty.')
         if not is_string(name):
-            raise DataError('Keyword name must be a string.', syntax=True)
+            raise DataError('Keyword name must be a string.')
         runner = self._get_runner_from_suite_file(name)
         if not runner and '.' in name:
             runner = self._get_explicit_runner(name)
@@ -324,7 +324,7 @@ class KeywordStore:
         runner = keywords[0].create_runner(name, self.languages)
         ctx = EXECUTION_CONTEXTS.current
         caller = ctx.user_keywords[-1] if ctx.user_keywords else ctx.test
-        if caller and runner.source != caller.source:
+        if caller and runner.keyword.source != caller.source:
             if self._exists_in_resource_file(name, caller.source):
                 message = (
                     f"Keyword '{caller.full_name}' called keyword '{name}' that exists "
@@ -419,26 +419,26 @@ class KeywordStore:
         if len(keywords) != 2:
             return keywords, warning
         stdlibs_without_remote = STDLIBS - {'Remote'}
-        if keywords[0].library.orig_name in stdlibs_without_remote:
+        if keywords[0].owner.real_name in stdlibs_without_remote:
             standard, custom = keywords
-        elif keywords[1].library.orig_name in stdlibs_without_remote:
+        elif keywords[1].owner.real_name in stdlibs_without_remote:
             custom, standard = keywords
         else:
             return keywords, warning
-        if not RUN_KW_REGISTER.is_run_keyword(custom.library.orig_name, custom.name):
+        if not RUN_KW_REGISTER.is_run_keyword(custom.owner.real_name, custom.name):
             warning = self._custom_and_standard_keyword_conflict_warning(custom, standard)
         return [custom], warning
 
     def _custom_and_standard_keyword_conflict_warning(self, custom, standard):
         custom_with_name = standard_with_name = ''
-        if custom.library.name != custom.library.orig_name:
-            custom_with_name = f" imported as '{custom.library.name}'"
-        if standard.library.name != standard.library.orig_name:
-            standard_with_name = f" imported as '{standard.library.name}'"
+        if custom.owner.name != custom.owner.real_name:
+            custom_with_name = f" imported as '{custom.owner.name}'"
+        if standard.owner.name != standard.owner.real_name:
+            standard_with_name = f" imported as '{standard.owner.name}'"
         return Message(
             f"Keyword '{standard.name}' found both from a custom library "
-            f"'{custom.library.orig_name}'{custom_with_name} and a standard library "
-            f"'{standard.library.orig_name}'{standard_with_name}. The custom keyword "
+            f"'{custom.owner.real_name}'{custom_with_name} and a standard library "
+            f"'{standard.owner.real_name}'{standard_with_name}. The custom keyword "
             f"is used. To select explicitly, and to get rid of this warning, use "
             f"either '{custom.full_name}' or '{standard.full_name}'.", level='WARN'
         )

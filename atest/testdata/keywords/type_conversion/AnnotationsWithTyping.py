@@ -1,14 +1,12 @@
-from typing import (Any, Dict, List, Mapping, MutableMapping, MutableSet, MutableSequence,
-                    Set, Sequence, Tuple, Union)
+from typing import (Any, Dict, List, Mapping, MutableMapping, MutableSet,
+                    MutableSequence, Set, Sequence, Tuple, Union)
 try:
     from typing_extensions import TypedDict
 except ImportError:
     from typing import TypedDict
 
-from robot.api.deco import not_keyword
 
-
-TypedDict = not_keyword(TypedDict)
+TypedDict.robot_not_keyword = True
 
 
 class Point2D(TypedDict):

@@ -2,7 +2,8 @@ import unittest
 from datetime import date, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
-from typing import Any, Dict, Generic, List, Mapping, Sequence, Set, Tuple, TypeVar, Union
+from typing import (Any, Dict, Generic, List, Literal, Mapping, Sequence, Set, Tuple,
+                    TypeVar, Union)
 
 from robot.errors import DataError
 from robot.running.arguments.typeinfo import TypeInfo, TYPE_NAMES
@@ -10,8 +11,8 @@ from robot.utils.asserts import assert_equal, assert_raises_with_msg
 
 
 def assert_info(info: TypeInfo, name, type=None, nested=()):
-    assert_equal(info.name, name)
-    assert_equal(info.type, type)
+    assert_equal(info.name, name, info)
+    assert_equal(info.type, type, info)
     assert_equal(len(info.nested), len(nested))
     for child, exp in zip(info.nested, nested):
         assert_info(child, exp.name, exp.type, exp.nested)
@@ -78,26 +79,9 @@ class TestTypeInfo(unittest.TestCase):
     def test_empty_union_not_allowed(self):
         for union in Union, ():
             assert_raises_with_msg(
-                DataError, 'Union used as a type hint cannot be empty.',
+                DataError, 'Union cannot be empty.',
                 TypeInfo.from_type_hint, union
             )
-
-    def test_from_dict(self):
-        for data, expected in [
-            ({}, TypeInfo()),
-            ({'name': 'x'}, TypeInfo('x')),
-            ({'name': 'Integer'}, TypeInfo('Integer', int)),
-            ({'name': 'I', 'type': int}, TypeInfo('I', int)),
-            ({'name': 'List', 'nested': [int]},
-             TypeInfo('List', list, [TypeInfo('int')])),
-            ({'name': 'list', 'nested': ['Int | Float']},
-             TypeInfo('list', list, [TypeInfo('Union', nested=[TypeInfo('Int'),
-                                                               TypeInfo('Float')])])),
-            ({'name': 'Map', 'nested': [{'name': 'str'}, {'name': 'int'}]},
-             TypeInfo('Map', dict, [TypeInfo('str'), TypeInfo('int')])),
-        ]:
-            for info in TypeInfo.from_dict(data), TypeInfo.from_type_hint(data):
-                assert_info(info, expected.name, expected.type, expected.nested)
 
     def test_valid_params(self):
         for typ in (List[int], Sequence[int], Set[int], Tuple[int], 'list[int]',
@@ -146,7 +130,7 @@ class TestTypeInfo(unittest.TestCase):
 
     def test_params_with_invalid_type(self):
         for name in TYPE_NAMES:
-            if TYPE_NAMES[name] not in (list, tuple, dict, set, frozenset):
+            if TYPE_NAMES[name] not in (list, tuple, dict, set, frozenset, Literal):
                 assert_raises_with_msg(
                     DataError,
                     f"'{name}' does not accept parameters, '{name}[int]' has 1.",
@@ -170,6 +154,17 @@ class TestTypeInfo(unittest.TestCase):
         assert_info(TypeInfo.from_type_hint(Any), 'Any', Any)
         assert_info(TypeInfo.from_type_hint(Ellipsis), '...', Ellipsis)
         assert_info(TypeInfo.from_type_hint(None), 'None', type(None))
+
+    def test_literal(self):
+        info = TypeInfo.from_type_hint(Literal['x', 1])
+        assert_info(info, 'Literal', Literal, (TypeInfo("'x'", 'x'),
+                                               TypeInfo('1', 1)))
+        assert_equal(str(info), "Literal['x', 1]")
+        info = TypeInfo.from_type_hint(Literal['int', None, True])
+        assert_info(info, 'Literal', Literal, (TypeInfo("'int'", 'int'),
+                                               TypeInfo('None', None),
+                                               TypeInfo('True', True)))
+        assert_equal(str(info), "Literal['int', None, True]")
 
     def test_non_type(self):
         for item in 42, object(), set(), b'hello':

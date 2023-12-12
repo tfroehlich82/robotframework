@@ -19,7 +19,7 @@ import re
 
 from robot.errors import DataError
 from robot.running import (ArgumentSpec, ResourceFileBuilder, TestLibrary,
-                           TestSuiteBuilder, TypeInfo, UserErrorHandler)
+                           TestSuiteBuilder, TypeInfo)
 from robot.utils import is_string, split_tags_from_doc, unescape
 from robot.variables import search_variable
 
@@ -32,11 +32,11 @@ class LibraryDocBuilder:
 
     def build(self, library):
         name, args = self._split_library_name_and_args(library)
-        lib = TestLibrary(name, args)
+        lib = TestLibrary.from_name(name, args=args)
         libdoc = LibraryDoc(name=lib.name,
                             doc=self._get_doc(lib),
                             version=lib.version,
-                            scope=str(lib.scope),
+                            scope=lib.scope.name,
                             doc_format=lib.doc_format,
                             source=lib.source,
                             lineno=lib.lineno)
@@ -61,7 +61,7 @@ class LibraryDocBuilder:
         return lib.doc or f"Documentation for library ``{lib.name}``."
 
     def _get_initializers(self, lib):
-        if lib.init.arguments:
+        if lib.init.args:
             return [KeywordDocBuilder().build_keyword(lib.init)]
         return []
 
@@ -158,11 +158,11 @@ class KeywordDocBuilder:
         if getattr(kw, 'error', None):
             doc = f'*Creating keyword failed:* {kw.error}'
         if not self._resource:
-            self._escape_strings_in_defaults(kw.arguments.defaults)
-        if kw.arguments.embedded:
-            self._remove_embedded(kw.arguments)
+            self._escape_strings_in_defaults(kw.args.defaults)
+        if kw.args.embedded:
+            self._remove_embedded(kw.args)
         return KeywordDoc(name=kw.name,
-                          args=kw.arguments,
+                          args=kw.args,
                           doc=doc,
                           tags=tags,
                           private=tags.robot('private'),
@@ -194,14 +194,14 @@ class KeywordDocBuilder:
         return doc, kw.tags + tags
 
     def _get_doc(self, kw):
-        if self._resource and not isinstance(kw, UserErrorHandler):
+        if self._resource:
             return unescape(kw.doc)
         return kw.doc
 
     def _remove_embedded(self, spec: ArgumentSpec):
         embedded = len(spec.embedded)
         pos_only = len(spec.positional_only)
-        spec.positional_only[:embedded] = []
+        spec.positional_only = spec.positional_only[embedded:]
         if embedded > pos_only:
-            spec.positional_or_named[:embedded-pos_only] = []
+            spec.positional_or_named = spec.positional_or_named[embedded-pos_only:]
         spec.embedded = ()

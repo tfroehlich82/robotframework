@@ -43,6 +43,10 @@ class Output(AbstractLogger, LoggerApi):
     def register_error_listener(self, listener):
         LOGGER.register_error_listener(listener)
 
+    @property
+    def delayed_logging(self):
+        return LOGGER.delayed_logging
+
     def close(self, result):
         self._xml_logger.logger.visit_statistics(result.statistics)
         self._xml_logger.close()
@@ -72,6 +76,18 @@ class Output(AbstractLogger, LoggerApi):
 
     def end_user_keyword(self, data, implementation, result):
         LOGGER.end_user_keyword(data, implementation, result)
+
+    def start_library_keyword(self, data, implementation, result):
+        LOGGER.start_library_keyword(data, implementation, result)
+
+    def end_library_keyword(self, data, implementation, result):
+        LOGGER.end_library_keyword(data, implementation, result)
+
+    def start_invalid_keyword(self, data, implementation, result):
+        LOGGER.start_invalid_keyword(data, implementation, result)
+
+    def end_invalid_keyword(self, data, implementation, result):
+        LOGGER.end_invalid_keyword(data, implementation, result)
 
     def start_for(self, data, result):
         LOGGER.start_for(data, result)

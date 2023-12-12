@@ -16,13 +16,14 @@
 from collections.abc import Mapping, Sequence, Set
 from datetime import date, datetime, timedelta
 from decimal import Decimal
+from enum import Enum
 from pathlib import Path
-from typing import Any, ForwardRef, get_type_hints, Union
+from typing import Any, ForwardRef, get_type_hints, Literal, Union
 
 from robot.conf import Languages, LanguagesLike
 from robot.errors import DataError
 from robot.utils import (has_args, is_union, NOT_SET, plural_or_not as s, setter,
-                         SetterAwareType, type_repr, typeddict_types)
+                         SetterAwareType, type_name, type_repr, typeddict_types)
 
 from ..context import EXECUTION_CONTEXTS
 from .customconverters import CustomArgumentConverters
@@ -60,8 +61,10 @@ TYPE_NAMES = {
     'map': dict,
     'set': set,
     'frozenset': frozenset,
-    'union': Union
+    'union': Union,
+    'literal': Literal
 }
+LITERAL_TYPES = (int, str, bytes, bool, Enum, type(None))
 
 
 class TypeInfo(metaclass=SetterAwareType):
@@ -80,10 +83,10 @@ class TypeInfo(metaclass=SetterAwareType):
     __slots__ = ('name', 'type')
 
     def __init__(self, name: 'str|None' = None,
-                 type: 'type|None' = None,
+                 type: Any = NOT_SET,
                  nested: 'Sequence[TypeInfo]' = ()):
-        if name and not type:
-            type = TYPE_NAMES.get(name.lower())
+        if type is NOT_SET:
+            type = TYPE_NAMES.get(name.lower()) if name else None
         self.name = name
         self.type = type
         self.nested = nested
@@ -94,39 +97,53 @@ class TypeInfo(metaclass=SetterAwareType):
 
         Used with parameterized types and unions.
         """
-        if self.is_union:
-            if not nested:
-                raise DataError('Union used as a type hint cannot be empty.')
-            return tuple(nested)
         typ = self.type
-        if typ is None or not nested:
-            return tuple(nested)
-        if not isinstance(typ, type):
-            self._report_nested_error(nested, 0)
+        if self.is_union:
+            self._validate_union(nested)
+        elif typ is None or not nested:
+            pass
+        elif typ is Literal:
+            self._validate_literal(nested)
+        elif not isinstance(typ, type):
+            self._report_nested_error(nested)
         elif issubclass(typ, tuple):
-            if nested[-1].type is Ellipsis and len(nested) != 2:
-                self._report_nested_error(nested, 1, 'Homogenous tuple', offset=-1)
+            if nested[-1].type is Ellipsis:
+                self._validate_nested_count(nested, 2, 'Homogenous tuple', offset=-1)
         elif issubclass(typ, Sequence) and not issubclass(typ, (str, bytes, bytearray)):
-            if len(nested) != 1:
-                self._report_nested_error(nested, 1)
+            self._validate_nested_count(nested, 1)
         elif issubclass(typ, Set):
-            if len(nested) != 1:
-                self._report_nested_error(nested, 1)
+            self._validate_nested_count(nested, 1)
         elif issubclass(typ, Mapping):
-            if len(nested) != 2:
-                self._report_nested_error(nested, 2)
+            self._validate_nested_count(nested, 2)
         elif typ in TYPE_NAMES.values():
-            self._report_nested_error(nested, 0)
+            self._report_nested_error(nested)
         return tuple(nested)
 
-    def _report_nested_error(self, nested, expected, kind=None, offset=0):
+    def _validate_union(self, nested):
+        if not nested:
+            raise DataError('Union cannot be empty.')
+
+    def _validate_literal(self, nested):
+        for info in nested:
+            if not isinstance(info.type, LITERAL_TYPES):
+                raise DataError(f'Literal supports only integers, strings, bytes, '
+                                f'Booleans, enums and None, value {info.name} is '
+                                f'{type_name(info.type)}.')
+
+    def _validate_nested_count(self, nested, expected, kind=None, offset=0):
+        if len(nested) != expected:
+            self._report_nested_error(nested, expected, kind, offset)
+
+    def _report_nested_error(self, nested, expected=0, kind=None, offset=0):
+        expected += offset
+        actual = len(nested) + offset
         args = ', '.join(str(n) for n in nested)
         kind = kind or f"'{self.name}{'[]' if expected > 0 else ''}'"
         if expected == 0:
             raise DataError(f"{kind} does not accept parameters, "
-                            f"'{self.name}[{args}]' has {len(nested) + offset}.")
+                            f"'{self.name}[{args}]' has {actual}.")
         raise DataError(f"{kind} requires exactly {expected} parameter{s(expected)}, "
-                        f"'{self.name}[{args}]' has {len(nested) + offset}.")
+                        f"'{self.name}[{args}]' has {actual}.")
 
     @property
     def is_union(self):
@@ -143,10 +160,6 @@ class TypeInfo(metaclass=SetterAwareType):
         - a union such as ``int | float``
         - a string such as ``'int'``, ``'list[int]'`` or ``'int | float'``
         - a ``TypedDict`` (represented as a :class:`TypedDictInfo`)
-        - a dictionary with a key ``name`` and optional keys ``type`` and ``nested``,
-          where ``nested`` is a sequence of dictionaries or other supported
-          type hints, such as ``{'name': 'int'}`` or
-          ``{'name': 'Union', 'nested': ['int', 'float']}``
         - a sequence of supported type hints to create a union from such as
           ``[int, float]`` or ``('int', 'list[int]')``
 
@@ -161,18 +174,19 @@ class TypeInfo(metaclass=SetterAwareType):
         if isinstance(hint, typeddict_types):
             return TypedDictInfo(hint.__name__, hint)
         if is_union(hint):
-            nested = [cls.from_type_hint(typ) for typ in hint.__args__]
+            nested = [cls.from_type_hint(a) for a in hint.__args__]
             return cls('Union', nested=nested)
         if hasattr(hint, '__origin__'):
-            if has_args(hint):
-                nested = [cls.from_type_hint(t) for t in hint.__args__]
+            if hint.__origin__ is Literal:
+                nested = [cls(repr(a) if not isinstance(a, Enum) else a.name, a)
+                          for a in hint.__args__]
+            elif has_args(hint):
+                nested = [cls.from_type_hint(a) for a in hint.__args__]
             else:
                 nested = []
             return cls(type_repr(hint, nested=False), hint.__origin__, nested)
         if isinstance(hint, str):
             return cls.from_string(hint)
-        if isinstance(hint, dict):
-            return cls.from_dict(hint)
         if isinstance(hint, (tuple, list)):
             return cls.from_sequence(hint)
         if isinstance(hint, type):
@@ -213,22 +227,6 @@ class TypeInfo(metaclass=SetterAwareType):
             return TypeInfoParser(hint).parse()
         except ValueError as err:
             raise DataError(str(err))
-
-    @classmethod
-    def from_dict(cls, data: dict) -> 'TypeInfo':
-        """Construct a ``TypeInfo`` based on a dictionary.
-
-        The dictionary must have a key ``name`` and it can optionally have keys
-        ``type`` and ``nested``. ``nested`` is a sequence of nested types
-        as dictionaries or other types supported by :meth:`from_type_hint`.
-
-        Use :meth:`from_type_hint` if other types than dictionaries need to
-        supported.
-        """
-        if not data:
-            return cls()
-        nested = [cls.from_type_hint(n) for n in data.get('nested', ())]
-        return cls(data['name'], data.get('type'), nested=nested)
 
     @classmethod
     def from_sequence(cls, sequence: 'tuple|list') -> 'TypeInfo':
