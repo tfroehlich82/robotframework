@@ -1,4 +1,3 @@
-import os
 import sys
 
 from robot.api import SuiteVisitor
@@ -22,6 +21,9 @@ def start_suite(data, result):
 def end_suite(data, result):
     assert len(data.tests) == 5, '%d tests, not 5' % len(data.tests)
     assert len(result.tests) == 5, '%d tests, not 5' % len(result.tests)
+    for test in result.tests:
+        if test.setup or test.body or test.teardown:
+            raise AssertionError(f"Result test '{test.name}' not cleared")
     assert data.name == data.doc == result.name == 'Not visible in results'
     assert result.doc.endswith('[start suite]')
     assert result.metadata['suite'] == '[start]'
@@ -71,23 +73,23 @@ message = log_message
 
 
 def output_file(path):
-    print("Output: %s" % os.path.basename(path), file=sys.__stderr__)
+    print(f"Output: {path.name}", file=sys.__stderr__)
 
 
 def log_file(path):
-    print("Log: %s" % os.path.basename(path), file=sys.__stderr__)
+    print(f"Log: {path.name}", file=sys.__stderr__)
 
 
 def report_file(path):
-    print("Report: %s" % os.path.basename(path), file=sys.__stderr__)
+    print(f"Report: {path.name}", file=sys.__stderr__)
 
 
 def debug_file(path):
-    print("Debug: %s" % os.path.basename(path), file=sys.__stderr__)
+    print(f"Debug: {path.name}", file=sys.__stderr__)
 
 
 def xunit_file(path):
-    print("Xunit: %s" % os.path.basename(path), file=sys.__stderr__)
+    print(f"Xunit: {path.name}", file=sys.__stderr__)
 
 
 def close():

@@ -145,19 +145,23 @@ class XmlLoggerAdapter(LoggerApi):
 
 class XmlLogger(ResultVisitor):
 
-    def __init__(self, path, log_level='TRACE', rpa=False, generator='Robot'):
+    def __init__(self, output, log_level='TRACE', rpa=False, generator='Robot',
+                 suite_only=False):
         self._log_message_is_logged = IsLogged(log_level)
         self._error_message_is_logged = IsLogged('WARN')
         # `_writer` is set to NullMarkupWriter when flattening, `_xml_writer` is not.
-        self._writer = self._xml_writer = self._get_writer(path, rpa, generator)
+        self._writer = self._xml_writer = self._get_writer(output, rpa, generator,
+                                                           suite_only)
         self.flatten_level = 0
         self._errors = []
 
-    def _get_writer(self, path, rpa, generator):
-        if not path:
+    def _get_writer(self, output, rpa, generator, suite_only):
+        if not output:
             return NullMarkupWriter()
-        writer = XmlWriter(path, write_empty=False, usage='output')
-        writer.start('robot', self._get_start_attrs(rpa, generator))
+        writer = XmlWriter(output, write_empty=False, usage='output',
+                           preamble=not suite_only)
+        if not suite_only:
+            writer.start('robot', self._get_start_attrs(rpa, generator))
         return writer
 
     def _get_start_attrs(self, rpa, generator):
@@ -195,10 +199,6 @@ class XmlLogger(ResultVisitor):
 
     def start_keyword(self, kw):
         self._writer.start('kw', self._get_start_keyword_attrs(kw))
-        self._write_list('var', kw.assign)
-        self._write_list('arg', [safe_str(a) for a in kw.args])
-        self._write_list('tag', kw.tags)
-        self._writer.element('doc', kw.doc)
         if kw.tags.robot('flatten'):
             self.flatten_level += 1
             self._writer = NullMarkupWriter()
@@ -216,6 +216,10 @@ class XmlLogger(ResultVisitor):
             self.flatten_level -= 1
             if self.flatten_level == 0:
                 self._writer = self._xml_writer
+        self._write_list('var', kw.assign)
+        self._write_list('arg', [safe_str(a) for a in kw.args])
+        self._write_list('tag', kw.tags)
+        self._writer.element('doc', kw.doc)
         if kw.timeout:
             self._writer.element('timeout', attrs={'value': str(kw.timeout)})
         self._write_status(kw)
@@ -241,21 +245,21 @@ class XmlLogger(ResultVisitor):
                                    'start': for_.start,
                                    'mode': for_.mode,
                                    'fill': for_.fill})
+
+    def end_for(self, for_):
         for name in for_.assign:
             self._writer.element('var', name)
         for value in for_.values:
             self._writer.element('value', value)
-
-    def end_for(self, for_):
         self._write_status(for_)
         self._writer.end('for')
 
     def start_for_iteration(self, iteration):
         self._writer.start('iter')
-        for name, value in iteration.assign.items():
-            self._writer.element('var', value, {'name': name})
 
     def end_for_iteration(self, iteration):
+        for name, value in iteration.assign.items():
+            self._writer.element('var', value, {'name': name})
         self._write_status(iteration)
         self._writer.end('iter')
 
@@ -307,19 +311,19 @@ class XmlLogger(ResultVisitor):
         if var.separator is not None:
             attr['separator'] = var.separator
         self._writer.start('variable', attr, write_empty=True)
-        for val in var.value:
-            self._writer.element('var', val)
 
     def end_var(self, var):
+        for val in var.value:
+            self._writer.element('var', val)
         self._write_status(var)
         self._writer.end('variable')
 
     def start_return(self, return_):
         self._writer.start('return')
-        for value in return_.values:
-            self._writer.element('value', value)
 
     def end_return(self, return_):
+        for value in return_.values:
+            self._writer.element('value', value)
         self._write_status(return_)
         self._writer.end('return')
 
@@ -339,10 +343,10 @@ class XmlLogger(ResultVisitor):
 
     def start_error(self, error):
         self._writer.start('error')
-        for value in error.values:
-            self._writer.element('value', value)
 
     def end_error(self, error):
+        for value in error.values:
+            self._writer.element('value', value)
         self._write_status(error)
         self._writer.end('error')
 

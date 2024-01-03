@@ -140,8 +140,7 @@ class VariableScopes:
             return
         for scope in self._scopes_until_suite:
             name, value = self._set_global_suite_or_test(scope, name, value)
-        if children:
-            self._variables_set.set_suite(name, value)
+        self._variables_set.set_suite(name, value, children)
 
     def set_test(self, name, value):
         if self._test is None:
@@ -203,11 +202,11 @@ class GlobalVariables(Variables):
                             ('${False}', False),
                             ('${None}', None),
                             ('${null}', None),
-                            ('${OUTPUT_DIR}', settings.output_directory),
-                            ('${OUTPUT_FILE}', settings.output or 'NONE'),
-                            ('${REPORT_FILE}', settings.report or 'NONE'),
-                            ('${LOG_FILE}', settings.log or 'NONE'),
-                            ('${DEBUG_FILE}', settings.debug_file or 'NONE'),
+                            ('${OUTPUT_DIR}', str(settings.output_directory)),
+                            ('${OUTPUT_FILE}', str(settings.output or 'NONE')),
+                            ('${REPORT_FILE}', str(settings.report or 'NONE')),
+                            ('${LOG_FILE}', str(settings.log or 'NONE')),
+                            ('${DEBUG_FILE}', str(settings.debug_file or 'NONE')),
                             ('${LOG_LEVEL}', settings.log_level),
                             ('${PREV_TEST_NAME}', ''),
                             ('${PREV_TEST_STATUS}', ''),
@@ -252,8 +251,14 @@ class SetVariables:
             if name in scope:
                 scope.pop(name)
 
-    def set_suite(self, name, value):
-        self._suite[name] = value
+    def set_suite(self, name, value, children=False):
+        for scope in reversed(self._scopes):
+            if children:
+                scope[name] = value
+            elif name in scope:
+                scope.pop(name)
+            if scope is self._suite:
+                break
 
     def set_test(self, name, value):
         for scope in reversed(self._scopes):

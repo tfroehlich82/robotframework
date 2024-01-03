@@ -15,6 +15,7 @@
 
 import os.path
 from abc import ABC
+from pathlib import Path
 
 from robot.errors import DataError, TimeoutError
 from robot.model import BodyItem
@@ -50,6 +51,8 @@ class Listeners(LoggerApi):
         return imported
 
     def _import_listener(self, listener, library=None) -> 'ListenerFacade':
+        if library and isinstance(listener, str) and listener.upper() == 'SELF':
+            listener = library.instance
         if isinstance(listener, str):
             name, args = split_args_from_name_or_path(listener)
             importer = Importer('listener', logger=LOGGER)
@@ -245,9 +248,25 @@ class Listeners(LoggerApi):
         for listener in self.listeners:
             listener.imported(import_type, name, attrs)
 
-    def output_file(self, file_type, path):
+    def output_file(self, path):
         for listener in self.listeners:
-            listener.output_file(file_type, path)
+            listener.output_file(path)
+
+    def report_file(self, path):
+        for listener in self.listeners:
+            listener.report_file(path)
+
+    def log_file(self, path):
+        for listener in self.listeners:
+            listener.log_file(path)
+
+    def xunit_file(self, path):
+        for listener in self.listeners:
+            listener.xunit_file(path)
+
+    def debug_file(self, path):
+        for listener in self.listeners:
+            listener.debug_file(path)
 
     def close(self):
         for listener in self.listeners:
@@ -297,16 +316,12 @@ class ListenerFacade(LoggerApi, ABC):
         self.name = name
         self.library = library
 
-    def output_file(self, type_: str, path: str):
-        method = self._get_method(f'{type_.lower()}_file')
-        method(path)
-
-    def _get_method(self, name):
+    def _get_method(self, name, fallback=None):
         for method_name in self._get_method_names(name):
             method = getattr(self.listener, method_name, None)
             if method:
                 return ListenerMethod(method, self.name)
-        return ListenerMethod(None, self.name)
+        return ListenerMethod(None, self.name) if fallback is None else fallback
 
     def _get_method_names(self, name):
         names = [name, self._to_camelCase(name)] if '_' in name else [name]
@@ -323,61 +338,71 @@ class ListenerV3Facade(ListenerFacade):
 
     def __init__(self, listener, name, library=None):
         super().__init__(listener, name, library)
+        get = self._get_method
         # Suite
-        self.start_suite = self._get_method('start_suite')
-        self.end_suite = self._get_method('end_suite')
+        self.start_suite = get('start_suite')
+        self.end_suite = get('end_suite')
         # Test
-        self.start_test = self._get_method('start_test')
-        self.end_test = self._get_method('end_test')
+        self.start_test = get('start_test')
+        self.end_test = get('end_test')
+        # Fallbacks for body items
+        start_body_item = self._get_method('start_body_item')
+        end_body_item = self._get_method('end_body_item')
         # Keywords
-        self.start_keyword = self._get_method('start_keyword')
-        self.end_keyword = self._get_method('end_keyword')
-        self._start_user_keyword = self._get_method('start_user_keyword')
-        self._end_user_keyword = self._get_method('end_user_keyword')
-        self._start_library_keyword = self._get_method('start_library_keyword')
-        self._end_library_keyword = self._get_method('end_library_keyword')
-        self._start_invalid_keyword = self._get_method('start_invalid_keyword')
-        self._end_invalid_keyword = self._get_method('end_invalid_keyword')
+        self.start_keyword = get('start_keyword', start_body_item)
+        self.end_keyword = get('end_keyword', end_body_item)
+        self._start_user_keyword = get('start_user_keyword')
+        self._end_user_keyword = get('end_user_keyword')
+        self._start_library_keyword = get('start_library_keyword')
+        self._end_library_keyword = get('end_library_keyword')
+        self._start_invalid_keyword = get('start_invalid_keyword')
+        self._end_invalid_keyword = get('end_invalid_keyword')
         # IF
-        self.start_if = self._get_method('start_if')
-        self.end_if = self._get_method('end_if')
-        self.start_if_branch = self._get_method('start_if_branch')
-        self.end_if_branch = self._get_method('end_if_branch')
+        self.start_if = get('start_if', start_body_item)
+        self.end_if = get('end_if', end_body_item)
+        self.start_if_branch = get('start_if_branch', start_body_item)
+        self.end_if_branch = get('end_if_branch', end_body_item)
         # TRY
-        self.start_try = self._get_method('start_try')
-        self.end_try = self._get_method('end_try')
-        self.start_try_branch = self._get_method('start_try_branch')
-        self.end_try_branch = self._get_method('end_try_branch')
+        self.start_try = get('start_try', start_body_item)
+        self.end_try = get('end_try', end_body_item)
+        self.start_try_branch = get('start_try_branch', start_body_item)
+        self.end_try_branch = get('end_try_branch', end_body_item)
         # FOR
-        self.start_for = self._get_method('start_for')
-        self.end_for = self._get_method('end_for')
-        self.start_for_iteration = self._get_method('start_for_iteration')
-        self.end_for_iteration = self._get_method('end_for_iteration')
+        self.start_for = get('start_for', start_body_item)
+        self.end_for = get('end_for', end_body_item)
+        self.start_for_iteration = get('start_for_iteration', start_body_item)
+        self.end_for_iteration = get('end_for_iteration', end_body_item)
         # WHILE
-        self.start_while = self._get_method('start_while')
-        self.end_while = self._get_method('end_while')
-        self.start_while_iteration = self._get_method('start_while_iteration')
-        self.end_while_iteration = self._get_method('end_while_iteration')
+        self.start_while = get('start_while', start_body_item)
+        self.end_while = get('end_while', end_body_item)
+        self.start_while_iteration = get('start_while_iteration', start_body_item)
+        self.end_while_iteration = get('end_while_iteration', end_body_item)
         # VAR
-        self.start_var = self._get_method('start_var')
-        self.end_var = self._get_method('end_var')
+        self.start_var = get('start_var', start_body_item)
+        self.end_var = get('end_var', end_body_item)
         # BREAK
-        self.start_break = self._get_method('start_break')
-        self.end_break = self._get_method('end_break')
+        self.start_break = get('start_break', start_body_item)
+        self.end_break = get('end_break', end_body_item)
         # CONTINUE
-        self.start_continue = self._get_method('start_continue')
-        self.end_continue = self._get_method('end_continue')
+        self.start_continue = get('start_continue', start_body_item)
+        self.end_continue = get('end_continue', end_body_item)
         # RETURN
-        self.start_return = self._get_method('start_return')
-        self.end_return = self._get_method('end_return')
+        self.start_return = get('start_return', start_body_item)
+        self.end_return = get('end_return', end_body_item)
         # ERROR
-        self.start_error = self._get_method('start_error')
-        self.end_error = self._get_method('end_error')
+        self.start_error = get('start_error', start_body_item)
+        self.end_error = get('end_error', end_body_item)
         # Messages
-        self.log_message = self._get_method('log_message')
-        self.message = self._get_method('message')
+        self.log_message = get('log_message')
+        self.message = get('message')
+        # Result files
+        self.output_file = self._get_method('output_file')
+        self.report_file = self._get_method('report_file')
+        self.log_file = self._get_method('log_file')
+        self.xunit_file = self._get_method('xunit_file')
+        self.debug_file = self._get_method('debug_file')
         # Close
-        self.close = self._get_method('close')
+        self.close = get('close')
 
     def start_user_keyword(self, data, implementation, result):
         if self._start_user_keyword:
@@ -432,6 +457,12 @@ class ListenerV2Facade(ListenerFacade):
         # Messages
         self._log_message = self._get_method('log_message')
         self._message = self._get_method('message')
+        # Result files
+        self._output_file = self._get_method('output_file')
+        self._report_file = self._get_method('report_file')
+        self._log_file = self._get_method('log_file')
+        self._xunit_file = self._get_method('xunit_file')
+        self._debug_file = self._get_method('debug_file')
         # Close
         self._close = self._get_method('close')
 
@@ -575,6 +606,21 @@ class ListenerV2Facade(ListenerFacade):
 
     def message(self, message):
         self._message(self._message_attributes(message))
+
+    def output_file(self, path: Path):
+        self._output_file(str(path))
+
+    def report_file(self, path: Path):
+        self._report_file(str(path))
+
+    def log_file(self, path: Path):
+        self._log_file(str(path))
+
+    def xunit_file(self, path: Path):
+        self._xunit_file(str(path))
+
+    def debug_file(self, path: Path):
+        self._debug_file(str(path))
 
     def _suite_attrs(self, data, result, end=False):
         attrs = {

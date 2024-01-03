@@ -1896,10 +1896,15 @@ class _RunKeyword(_BuiltInBase):
         ctx = self._context
         if not (ctx.dry_run or self._accepts_embedded_arguments(name, ctx)):
             name, args = self._replace_variables_in_name([name] + list(args))
-        parent = ctx.steps[-1][0] if ctx.steps else (ctx.test or ctx.suite)
-        kw = Keyword(name, args=args, parent=parent,
-                     lineno=getattr(parent, 'lineno', None))
-        return kw.run(ctx)
+        if ctx.steps:
+            data, result = ctx.steps[-1]
+            lineno = data.lineno
+        else:    # Called, typically by a listener, when no keyword started.
+            data = lineno = None
+            result = ctx.test or (ctx.suite.setup if not ctx.suite.has_tests
+                                  else ctx.suite.teardown)
+        kw = Keyword(name, args=args, parent=data, lineno=lineno)
+        return kw.run(result, ctx)
 
     def _accepts_embedded_arguments(self, name, ctx):
         if '{' in name:
@@ -3155,18 +3160,33 @@ class _Misc(_BuiltInBase):
         pass
 
     def set_log_level(self, level):
-        """Sets the log threshold to the specified level and returns the old level.
+        """Sets the log threshold to the specified level.
 
         Messages below the level will not logged. The default logging level is
-        INFO, but it can be overridden with the command line option ``--loglevel``.
-
-        The available levels: TRACE, DEBUG, INFO (default), WARN, ERROR and NONE
+        INFO, but it can be overridden with the ``--loglevel`` command line option.
+        The available levels are TRACE, DEBUG, INFO (default), WARN, ERROR and NONE
         (no logging).
+
+        The old level is returned and can be used for setting the level back
+        later. An alternative way to reset the level is using the dedicated
+        `Reset Log Level` keyword.
         """
         old = self._context.output.set_log_level(level)
         self._namespace.variables.set_global('${LOG_LEVEL}', level.upper())
         self.log(f'Log level changed from {old} to {level.upper()}.', level='DEBUG')
         return old
+
+    def reset_log_level(self):
+        """Resets the log level to the original value.
+
+        The original log level is set from the command line with the ``--loglevel``
+        option and is INFO by default. The active log level can be changed using
+        the `Set Log Level` keyword.
+
+        New in Robot Framework 7.0.
+        """
+        level = self._context.output.initial_log_level
+        return self.set_log_level(level)
 
     def reload_library(self, name_or_instance):
         """Rechecks what keywords the specified library provides.
