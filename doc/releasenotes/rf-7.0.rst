@@ -1,27 +1,23 @@
-=======================================
-Robot Framework 7.0 release candidate 1
-=======================================
+===================
+Robot Framework 7.0
+===================
+
+
+..
+     GitHub fails to render this file at the moment.
+     View rf-7.0.pdf until the problem is resolved.
+
 
 .. default-role:: code
 
-`Robot Framework`_ 7.0 is a new major release with enhanced listener interface
+`Robot Framework`_ 7.0 is a new major release with highly enhanced listener interface
 (`#3296`_), native `VAR` syntax for creating variables (`#3761`_), support for
 mixing embedded and normal arguments with library keywords (`#4710`_), JSON
 result format (`#4847`_) and various other enhancements and bug fixes.
-Robot Framework 7.0 requires Python 3.8 or newer (`#4294`_).
 
-Robot Framework 7.0 rc 1 was released on Thursday December 21, 2023, with all
-features and fixes planned to be included in the final release. It is targeted
-for anyone interested to see how they can use the `interesting new features`__
-and how `backwards incompatible changes`_ and deprecations_ possibly affect
-their tests, tasks, tools and libraries. The target date for the final release
-is Monday January 8, 2024.
-
-__ `Most important enhancements`_
-
-Questions and comments related to the release can be sent to the `#devel`
-channel on `Robot Framework Slack`_ and possible bugs submitted to
-the `issue tracker`_.
+Robot Framework 7.0 was released on Thursday January 11, 2024. Questions and comments
+related to the release can be sent to the `#devel` channel on `Robot Framework Slack`_
+and possible bugs submitted to the `issue tracker`_.
 
 .. _Robot Framework: http://robotframework.org
 .. _Robot Framework Foundation: http://robotframework.org/foundation
@@ -29,7 +25,6 @@ the `issue tracker`_.
 .. _PyPI: https://pypi.python.org/pypi/robotframework
 .. _issue tracker milestone: https://github.com/robotframework/robotframework/milestone/64
 .. _issue tracker: https://github.com/robotframework/robotframework/issues
-.. _robotframework-users: http://groups.google.com/group/robotframework-users
 .. _Slack: http://slack.robotframework.org
 .. _Robot Framework Slack: Slack_
 .. _installation instructions: ../../INSTALL.rst
@@ -45,13 +40,13 @@ If you have pip_ installed, just run
 
 ::
 
-   pip install --pre --upgrade robotframework
+   pip install --upgrade robotframework
 
-to install the latest available release or use
+to install the latest available stable release or use
 
 ::
 
-   pip install robotframework==7.0rc1
+   pip install robotframework==7.0
 
 to install exactly this version. Alternatively you can download the package
 from PyPI_ and install it manually. For more details and other installation
@@ -70,6 +65,7 @@ Most important enhancements
   tools and libraries in the ecosystem. All profits from the conference will be
   used for future Robot Framework development.
 
+.. _Pekka Klärck: https://github.com/pekkaklarck
 __ https://robocon.io
 __ https://robocon.io/#live-opening-the-conference
 __ https://robocon.io/#online-opening-the-conference-live
@@ -77,19 +73,22 @@ __ https://robocon.io/#online-opening-the-conference-live
 Listener enhancements
 ---------------------
 
-Robot Framework's listener interface is a very powerful mechanism to get
+Robot Framework's `listener interface`__ is a very powerful mechanism to get
 notifications about various events during execution and it also allows modifying
 data and results on the fly. It is not typically directly used by normal Robot
-Framework users, but they are likely to use tools that are based on it.
+Framework users, but they are likely to use tools that use it internally.
 The listener API has been significantly enhanced making it possible
 to create even more powerful and interesting tools in the future.
+
+__ http://robotframework.org/robotframework/latest/RobotFrameworkUserGuide.html#listener-interface
 
 Support keywords and control structures with listener version 3
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 The major limitation with the listener API has been that the listener
-API version 2 only supports getting notifications and that the more powerful
-listener API version 3 has only supported suites and tests/tasks.
+API version 2 only supports getting notifications, not making modifications,
+and that the more powerful listener API version 3 has only supported suites
+and tests/tasks.
 
 The biggest enhancement in the whole Robot Framework 7.0 is that the listener
 version 3 has been extended to support also keywords and control structures (`#3296`_).
@@ -98,20 +97,18 @@ about started keywords and ended WHILE loops:
 
 .. sourcecode:: python
 
-    from robot.running import Keyword as KeywordData, While as WhileData
-    from robot.result import Keyword as KeywordResult, While as WhileResult
+    from robot import result, running
 
 
-    def start_keyword(data: KeywordData, result: KeywordResult):
+    def start_keyword(data: running.Keyword, result: result.Keyword):
         print(f"Keyword '{result.full_name}' used on line {data.lineno} started.")
 
 
-    def end_while(data: WhileData, result: WhileResult):
+    def end_while(data: running.While, result: result.While):
         print(f"WHILE loop on line {data.lineno} ended with status {result.status} "
               f"after {len(result.body)} iterations.")
 
-
-With keywords it is possible to also get more information about the actually
+With keyword calls it is possible to also get more information about the actually
 executed keyword. For example, the following listener prints some information
 about the executed keyword and the library it belongs to:
 
@@ -145,8 +142,8 @@ listeners cannot directly fail keywords so that execution would stop or handle
 failures so that execution would continue. This kind of functionality may be
 added in the future if there are needs.
 
-The new listener v3 methods are so powerful and versatile that going them through
-thoroughly in these release notes is not possible. For more examples, you
+The new listener version 3 methods are so powerful and versatile that going them
+through thoroughly in these release notes is not possible. For more examples, you
 can see the `acceptance tests`__ using the methods in various interesting and even
 crazy ways.
 
@@ -155,7 +152,7 @@ __ https://github.com/robotframework/robotframework/tree/master/atest/testdata/o
 Listener version 3 is the default listener version
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Earlier listeners needed to specify the API version they used with the
+Earlier listeners always needed to specify the API version they used with the
 `ROBOT_LISTENER_API_VERSION` attribute. Now that the listener version 3 got
 the new methods, it is considered so much more powerful than the version 2
 that it was made the default listener version (`#4910`_).
@@ -168,7 +165,7 @@ possible.
 Libraries can register themselves as listeners by using string `SELF`
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Listeners are typically enabled  from the command line, but libraries
+Listeners are typically enabled from the command line, but libraries
 can register listeners as well. Often libraries themselves want to act
 as listeners, and that has earlier required using `self.ROBOT_LIBRARY_LISTENER = self`
 in the `__init__` method. Robot Framework 7.0 makes it possible to use string
@@ -190,6 +187,13 @@ This is especially convenient when using the `@library` decorator:
         @keyword
         def example(self, arg):
             ...
+
+Nicer API for modifying keyword arguments
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Modifying keyword call arguments programmatically has been made more convenient
+(`#5000`_). This enhancement eases modifying arguments using the new listener
+version 3 `start/end_keyword` methods.
 
 Paths are passed to version 3 listeners as `pathlib.Path` objects
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -277,7 +281,7 @@ Mixed argument support with library keywords
 
 User keywords got support to use both embedded and normal arguments in Robot
 Framework 6.1 (`#4234`__) and now that support has been added also to library keywords
-(`#4710`_). The syntax works so, that if the function or method implementing the keyword
+(`#4710`_). The syntax works so, that if a function or method implementing a keyword
 accepts more arguments than there are embedded arguments, the remaining arguments
 can be passed in as normal arguments. This is illustrated by the following example
 keyword:
@@ -396,8 +400,8 @@ the following typing now also works with Python 3.8:
 These stringified types are also compatible with the Remote library API and other
 scenarios where using actual types is not possible.
 
-__ https://peps.python.org/pep-0585/
-__ https://peps.python.org/pep-0604/
+__ https://peps.python.org/pep-0585
+__ https://peps.python.org/pep-0604
 
 Tags set globally can be removed using `-tag` syntax
 ----------------------------------------------------
@@ -451,12 +455,12 @@ a good idea, and in this case parsing the custom format turned out to be slow
 as well.
 
 Nowadays the result model stores timestamps as standard datetime_ objects and
-elapsed times as timedelta_ (`#4258`_). This makes creating timestamps and
+elapsed times as a timedelta_ (`#4258`_). This makes creating timestamps and
 operating with them more convenient and considerably faster. The new objects can
 be accessed via `start_time`, `end_time` and `elapsed_time` attributes that were
 added as forward compatibility already in Robot Framework 6.1 (`#4765`_).
 Old information is still available via the old `starttime`, `endtime` and
-`elapsedtime` attributes so this change is fully backwards compatible.
+`elapsedtime` attributes, so this change is fully backwards compatible.
 
 The timestamp format in output.xml has also been changed from the custom
 `YYYYMMDD HH:MM:SS.mmm` format to `ISO 8601`_ compatible
@@ -550,7 +554,7 @@ this causes for those developing tools that process output.xml files.
 Keyword name related changes
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-How keyword names are stored in output.xml has changed slightly as well (`#4884`_).
+How keyword names are stored in output.xml has changed slightly (`#4884`_).
 With each executed keywords we store both the name of the keyword and the name
 of the library or resource file containing it. Earlier the latter was stored to
 attribute `library` also with resource files, but nowadays the attribute is generic
@@ -726,11 +730,11 @@ Other backwards incompatible changes
   `arg: ByteString` to `arg: bytes | bytearray` and the functionality
   stays exactly the same.
 
-- Paths passed to listener version 3 methods like `output_file` and `log_file` have
-  been changed from strings to `pathlib.Path` objects (`#4988`_). Most of the time
-  both kinds of paths work interchangeably, so this change is unlikely to cause issues.
-  If you need to handle these paths as strings, they can be converted by using
-  `str(path)`.
+- Paths passed to result file related listener version 3 methods like `output_file`
+  and `log_file` have been changed from strings to `pathlib.Path` objects (`#4988`_).
+  Most of the time both kinds of paths work interchangeably, so this change is unlikely
+  to cause issues. If you need to handle these paths as strings, they can be converted
+  by using `str(path)`.
 
 - `robot.utils.normalize` does not anymore support bytes (`#4936`_).
 
@@ -826,8 +830,7 @@ and its over 60 member organizations. If your organization is using Robot Framew
 and benefiting from it, consider joining the foundation to support its
 development as well.
 
-Robot Framework 7.0 team funded by the foundation consists of
-`Pekka Klärck <https://github.com/pekkaklarck>`_ and
+Robot Framework 7.0 team funded by the foundation consists of `Pekka Klärck`_ and
 `Janne Härkönen <https://github.com/yanne>`_ (part time).
 In addition to work done by them, the community has provided some great contributions:
 
@@ -860,6 +863,8 @@ everyone else who has tested preview releases, submitted bug reports, proposed
 enhancements, debugged problems, or otherwise helped with Robot Framework 7.0
 development.
 
+See you at `RoboCon 2024 <https://robocon.io>`__ either onsite or online!
+
 | `Pekka Klärck`_
 | Robot Framework lead developer
 
@@ -873,434 +878,360 @@ Full list of fixes and enhancements
       - Type
       - Priority
       - Summary
-      - Added
     * - `#3296`_
       - enhancement
       - critical
       - Support keywords and control structures with listener version 3
-      - beta 1
     * - `#3761`_
       - enhancement
       - critical
       - Native `VAR` syntax to create variables inside tests and keywords
-      - alpha 1
     * - `#4294`_
       - enhancement
       - critical
       - Drop Python 3.6 and 3.7 support
-      - alpha 1
     * - `#4710`_
       - enhancement
       - critical
       - Support library keywords with both embedded and normal arguments
-      - alpha 1
     * - `#4847`_
       - enhancement
       - critical
       - Support JSON serialization with result model
-      - rc 1
     * - `#4659`_
       - bug
       - high
       - Performance regression when using `Run Keyword` and keyword name contains a variable
-      - alpha 1
     * - `#4921`_
       - bug
       - high
       - Log levels don't work correctly with `robot:flatten`
-      - alpha 1
     * - `#3725`_
       - enhancement
       - high
       - Support dark theme with report and log
-      - rc 1
     * - `#4258`_
       - enhancement
       - high
       - Change timestamps from custom strings to `datetime` in result model and to ISO 8601 format in output.xml
-      - alpha 1
     * - `#4374`_
       - enhancement
       - high
       - Support removing tags set globally by using `-tag` syntax with `[Tags]` setting
-      - alpha 1
     * - `#4633`_
       - enhancement
       - high
       - Automatic argument conversion and validation for `Literal`
-      - beta 1
     * - `#4711`_
       - enhancement
       - high
       - Support type aliases in formats `'list[int]'` and `'int | float'` in argument conversion
-      - alpha 1
     * - `#4803`_
       - enhancement
       - high
       - Async support to dynamic and hybrid library APIs
-      - alpha 2
     * - `#4808`_
       - bug
       - medium
       - Async keywords are not stopped when execution is stopped gracefully
-      - alpha 2
     * - `#4859`_
       - bug
       - medium
       - Parsing errors in reStructuredText files have no source
-      - alpha 1
     * - `#4880`_
       - bug
       - medium
       - Initially empty test fails even if pre-run modifier adds content to it
-      - alpha 1
     * - `#4886`_
       - bug
       - medium
       - `Set Variable If` is slow if it has several conditions
-      - alpha 1
     * - `#4898`_
       - bug
       - medium
       - Resolving special variables can fail with confusing message
-      - alpha 1
     * - `#4915`_
       - bug
       - medium
       - `cached_property` attributes are called when importing library
-      - alpha 1
     * - `#4924`_
       - bug
       - medium
       - WHILE `on_limit` missing from listener v2 attributes
-      - alpha 1
     * - `#4926`_
       - bug
       - medium
       - WHILE and TRY content are not removed with `--removekeywords all`
-      - alpha 1
     * - `#4945`_
       - bug
       - medium
       - `TypedDict` with forward references do not work in argument conversion
-      - alpha 2
     * - `#4956`_
       - bug
       - medium
       - DotDict behaves inconsistent on equality checks. `x == y` != `not x != y` and not `x != y` == `not x == y`
-      - beta 1
     * - `#4964`_
       - bug
       - medium
       - Variables set using `Set Suite Variable` with `children=True` cannot be properly overwritten
-      - rc 1
     * - `#4980`_
       - bug
       - medium
       - DateTime library uses deprecated `datetime.utcnow()`
-      - rc 1
+    * - `#4999`_
+      - bug
+      - medium
+      - XML Library: Double namespace during Element To String
+    * - `#5005`_
+      - bug
+      - medium
+      - `Log Variables` should not consume iterables
     * - `#3017`_
       - enhancement
       - medium
       - Add return type to Libdoc specs and HTML output
-      - alpha 2
     * - `#4103`_
       - enhancement
       - medium
       - Process: Change the default `stdin` behavior from `subprocess.PIPE` to `None`
-      - alpha 1
     * - `#4302`_
       - enhancement
       - medium
       - Remove `Reserved` library
-      - alpha 1
     * - `#4343`_
       - enhancement
       - medium
       - Collections: Support case-insensitive list and dictionary comparisons
-      - alpha 2
     * - `#4375`_
       - enhancement
       - medium
       - Change token type of `AS` (or `WITH NAME`) used with library imports to `Token.AS`
-      - alpha 1
     * - `#4385`_
       - enhancement
       - medium
       - Change the parsing model object produced by `Test Tags` (and `Force Tags`) to `TestTags`
-      - alpha 1
     * - `#4432`_
       - enhancement
       - medium
       - Loudly deprecate singular section headers
-      - alpha 1
     * - `#4501`_
       - enhancement
       - medium
       - Loudly deprecate old Python 2/3 compatibility layer and other deprecated utils
-      - alpha 1
     * - `#4524`_
       - enhancement
       - medium
       - Loudly deprecate variables used as embedded arguments not matching custom patterns
-      - alpha 1
     * - `#4545`_
       - enhancement
       - medium
       - Support creating assigned variable name based on another variable like `${${var}} =    Keyword`
-      - alpha 1
     * - `#4667`_
       - enhancement
       - medium
       - Remove deprecated constructs from Libdoc spec files
-      - alpha 1
     * - `#4685`_
       - enhancement
       - medium
       - Deprecate `SHORTEST` mode being default with `FOR IN ZIP` loops
-      - alpha 1
     * - `#4708`_
       - enhancement
       - medium
       - Use `assing`, not `variable`, with FOR and TRY/EXCEPT model objects when referring to assigned variables
-      - alpha 1
     * - `#4720`_
       - enhancement
       - medium
       - Require `--suite parent.suite` to match the full suite name
-      - alpha 1
     * - `#4721`_
       - enhancement
       - medium
       - Change behavior of `--test` and `--include` so that they are cumulative
-      - alpha 1
     * - `#4747`_
       - enhancement
       - medium
       - Support `[Setup]` with user keywords
-      - alpha 1
     * - `#4784`_
       - enhancement
       - medium
       - Remote: Enhance `datetime`, `date` and `timedelta` conversion
-      - alpha 1
     * - `#4841`_
       - enhancement
       - medium
       - Add typing to all modules under `robot.api`
-      - alpha 2
     * - `#4846`_
       - enhancement
       - medium
       - Result model: Loudly deprecate not needed attributes and remove already deprecated ones
-      - alpha 1
     * - `#4872`_
       - enhancement
       - medium
       - Control continue-on-failure mode by using recursive and non-recursive tags together
-      - rc 1
     * - `#4876`_
       - enhancement
       - medium
       - Loudly deprecate `[Return]` setting
-      - alpha 1
     * - `#4877`_
       - enhancement
       - medium
       - XML: Support ignoring element order with `Elements Should Be Equal`
-      - beta 1
     * - `#4883`_
       - enhancement
       - medium
       - Result model: Add `message` to keywords and control structures and remove `doc` from controls
-      - alpha 1
     * - `#4884`_
       - enhancement
       - medium
       - Result model: Enhance storing keyword name
-      - alpha 1
     * - `#4896`_
       - enhancement
       - medium
       - Support `separator=<value>` configuration option with scalar variables in Variables section
-      - alpha 1
     * - `#4903`_
       - enhancement
       - medium
       - Support argument conversion and named arguments with dynamic variable files
-      - alpha 1
     * - `#4905`_
       - enhancement
       - medium
       - Support creating variable name based on another variable like `${${VAR}}` in Variables section
-      - alpha 1
     * - `#4910`_
       - enhancement
       - medium
       - Make listener v3 the default listener API
-      - beta 1
     * - `#4912`_
       - enhancement
       - medium
       - Parsing model: Move `type` and `tokens` from `_fields` to `_attributes`
-      - alpha 1
     * - `#4930`_
       - enhancement
       - medium
       - BuiltIn: New `Reset Log Level` keyword for resetting the log level to the original value
-      - rc 1
     * - `#4939`_
       - enhancement
       - medium
       - Parsing model: Rename `Return` to `ReturnSetting` and `ReturnStatement` to `Return`
-      - alpha 2
     * - `#4942`_
       - enhancement
       - medium
       - Add public argument conversion API for libraries and other tools
-      - alpha 2
     * - `#4952`_
       - enhancement
       - medium
       - Collections: Make `ignore_order` and `ignore_keys` recursive
-      - alpha 2
     * - `#4960`_
       - enhancement
       - medium
       - Support integer conversion with strings representing whole number floats like `'1.0'` and `'2e10'`
-      - beta 1
     * - `#4976`_
       - enhancement
       - medium
       - Support string `SELF` (case-insenstive) when library registers itself as listener
-      - beta 1
     * - `#4979`_
       - enhancement
       - medium
       - Add `robot.result.TestSuite.to/from_xml` methods
-      - rc 1
     * - `#4982`_
       - enhancement
       - medium
       - DateTime: Support `datetime.date` as an input format with date related keywords
-      - rc 1
     * - `#4983`_
       - enhancement
       - medium
       - Type conversion: Remove support for deprecated `ByteString`
-      - rc 1
+    * - `#5000`_
+      - enhancement
+      - medium
+      - Nicer API for setting keyword call arguments programmatically
     * - `#4934`_
       - ---
       - medium
       - Enhance performance of visiting parsing model
-      - alpha 1
     * - `#4621`_
       - bug
       - low
       - OperatingSystem library docs have broken link / title
-      - rc 1
     * - `#4798`_
       - bug
       - low
       - `--removekeywords passed` doesn't remove test setup and teardown
-      - beta 1
     * - `#4867`_
       - bug
       - low
       - Original order of dictionaries is not preserved when they are pretty printed in log messages
-      - alpha 1
     * - `#4870`_
       - bug
       - low
       - User keyword teardown missing from running model JSON schema
-      - alpha 1
     * - `#4904`_
       - bug
       - low
       - Importing static variable file with arguments does not fail
-      - alpha 1
     * - `#4913`_
       - bug
       - low
       - Trace log level logs arguments twice for embedded arguments
-      - alpha 1
     * - `#4927`_
       - bug
       - low
       - WARN level missing from the log level selector in log.html
-      - alpha 1
     * - `#4967`_
       - bug
       - low
       - Variables are not resolved in keyword name in WUKS error message
-      - beta 1
     * - `#4861`_
       - enhancement
       - low
       - Remove deprecated `accept_plain_values` from `timestr_to_secs` utility function
-      - alpha 1
     * - `#4862`_
       - enhancement
       - low
       - Deprecate `elapsed_time_to_string` accepting time as milliseconds
-      - alpha 1
     * - `#4864`_
       - enhancement
       - low
       - Process: Make warning about processes hanging if output buffers get full more visible
-      - alpha 1
     * - `#4885`_
       - enhancement
       - low
       - Add `full_name` to replace `longname` to suite and test objects
-      - alpha 1
     * - `#4900`_
       - enhancement
       - low
       - Make keywords and control structures in log look more like original data
-      - alpha 1
     * - `#4922`_
       - enhancement
       - low
       - Change the log level of `Set Log Level` message from INFO to DEBUG
-      - alpha 1
     * - `#4933`_
       - enhancement
       - low
       - Type conversion: Ignore hyphens when matching enum members
-      - alpha 1
     * - `#4935`_
       - enhancement
       - low
       - Use `casefold`, not `lower`, when comparing strings case-insensitively
-      - alpha 1
     * - `#4936`_
       - enhancement
       - low
       - Remove bytes support from `robot.utils.normalize` function
-      - alpha 1
     * - `#4954`_
       - enhancement
       - low
       - Collections and String: Add `ignore_case` as alias for `case_insensitive`
-      - alpha 2
     * - `#4958`_
       - enhancement
       - low
       - Document `robot_running` and `dry_run_active` properties of the BuiltIn library in the User Guide
-      - beta 1
     * - `#4975`_
       - enhancement
       - low
       - Support `times` and `x` suffixes with `WHILE` limit to make it more compatible with `Wait Until Keyword Succeeds`
-      - beta 1
     * - `#4988`_
       - enhancement
       - low
       - Change paths passed to listener v3 methods to `pathlib.Path` instances
-      - rc 1
 
-Altogether 85 issues. View on the `issue tracker <https://github.com/robotframework/robotframework/issues?q=milestone%3Av7.0>`__.
+Altogether 88 issues. View on the `issue tracker <https://github.com/robotframework/robotframework/issues?q=milestone%3Av7.0>`__.
 
 .. _#3296: https://github.com/robotframework/robotframework/issues/3296
 .. _#3761: https://github.com/robotframework/robotframework/issues/3761
@@ -1327,6 +1258,8 @@ Altogether 85 issues. View on the `issue tracker <https://github.com/robotframew
 .. _#4956: https://github.com/robotframework/robotframework/issues/4956
 .. _#4964: https://github.com/robotframework/robotframework/issues/4964
 .. _#4980: https://github.com/robotframework/robotframework/issues/4980
+.. _#4999: https://github.com/robotframework/robotframework/issues/4999
+.. _#5005: https://github.com/robotframework/robotframework/issues/5005
 .. _#3017: https://github.com/robotframework/robotframework/issues/3017
 .. _#4103: https://github.com/robotframework/robotframework/issues/4103
 .. _#4302: https://github.com/robotframework/robotframework/issues/4302
@@ -1365,6 +1298,7 @@ Altogether 85 issues. View on the `issue tracker <https://github.com/robotframew
 .. _#4979: https://github.com/robotframework/robotframework/issues/4979
 .. _#4982: https://github.com/robotframework/robotframework/issues/4982
 .. _#4983: https://github.com/robotframework/robotframework/issues/4983
+.. _#5000: https://github.com/robotframework/robotframework/issues/5000
 .. _#4934: https://github.com/robotframework/robotframework/issues/4934
 .. _#4621: https://github.com/robotframework/robotframework/issues/4621
 .. _#4798: https://github.com/robotframework/robotframework/issues/4798

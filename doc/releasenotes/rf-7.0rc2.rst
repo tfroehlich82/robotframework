@@ -1,5 +1,5 @@
 =======================================
-Robot Framework 7.0 release candidate 1
+Robot Framework 7.0 release candidate 2
 =======================================
 
 .. default-role:: code
@@ -10,12 +10,12 @@ mixing embedded and normal arguments with library keywords (`#4710`_), JSON
 result format (`#4847`_) and various other enhancements and bug fixes.
 Robot Framework 7.0 requires Python 3.8 or newer (`#4294`_).
 
-Robot Framework 7.0 rc 1 was released on Thursday December 21, 2023, with all
+Robot Framework 7.0 rc 2 was released on Thursday January 4, 2024, with all
 features and fixes planned to be included in the final release. It is targeted
 for anyone interested to see how they can use the `interesting new features`__
 and how `backwards incompatible changes`_ and deprecations_ possibly affect
 their tests, tasks, tools and libraries. The target date for the final release
-is Monday January 8, 2024.
+is Wednesday January 10, 2024.
 
 __ `Most important enhancements`_
 
@@ -51,7 +51,7 @@ to install the latest available release or use
 
 ::
 
-   pip install robotframework==7.0rc1
+   pip install robotframework==7.0rc2
 
 to install exactly this version. Alternatively you can download the package
 from PyPI_ and install it manually. For more details and other installation
@@ -200,6 +200,13 @@ paths were strings, but nowadays listener version 3 methods get them as
 more convenient `pathlib.Path`__ objects.
 
 __ https://docs.python.org/3/library/pathlib.html
+
+Nicer API for modifying keyword arguments
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Modifying keyword call arguments programmatically has been made more convenient
+(`#5000`_). This enhancement eases modifying arguments using the new listener
+version 3 `start/end_keyword` methods.
 
 Native `VAR` syntax
 -------------------
@@ -1189,6 +1196,11 @@ Full list of fixes and enhancements
       - medium
       - Type conversion: Remove support for deprecated `ByteString`
       - rc 1
+    * - `#5000`_
+      - enhancement
+      - medium
+      - Nicer API for setting keyword call arguments programmatically
+      - rc 2
     * - `#4934`_
       - ---
       - medium
@@ -1300,7 +1312,7 @@ Full list of fixes and enhancements
       - Change paths passed to listener v3 methods to `pathlib.Path` instances
       - rc 1
 
-Altogether 85 issues. View on the `issue tracker <https://github.com/robotframework/robotframework/issues?q=milestone%3Av7.0>`__.
+Altogether 86 issues. View on the `issue tracker <https://github.com/robotframework/robotframework/issues?q=milestone%3Av7.0>`__.
 
 .. _#3296: https://github.com/robotframework/robotframework/issues/3296
 .. _#3761: https://github.com/robotframework/robotframework/issues/3761
@@ -1365,6 +1377,7 @@ Altogether 85 issues. View on the `issue tracker <https://github.com/robotframew
 .. _#4979: https://github.com/robotframework/robotframework/issues/4979
 .. _#4982: https://github.com/robotframework/robotframework/issues/4982
 .. _#4983: https://github.com/robotframework/robotframework/issues/4983
+.. _#5000: https://github.com/robotframework/robotframework/issues/5000
 .. _#4934: https://github.com/robotframework/robotframework/issues/4934
 .. _#4621: https://github.com/robotframework/robotframework/issues/4621
 .. _#4798: https://github.com/robotframework/robotframework/issues/4798
