@@ -66,7 +66,7 @@ Keyword
 
     @classmethod
     def setUpClass(cls):
-        with open(cls.path, 'w') as f:
+        with open(cls.path, 'w', encoding='UTF-8') as f:
             f.write(cls.data)
 
     @classmethod
@@ -241,17 +241,17 @@ class TestLineNumberAndSource(unittest.TestCase):
             assert_equal(suite.resource.imports[0].directory, source.parent)
 
     def test_variable(self):
-        self._assert_lineno_and_source(self.suite.resource.variables[0], 8)
+        self._assert_lineno_and_source(self.suite.resource.variables[0], 10)
 
     def test_test(self):
-        self._assert_lineno_and_source(self.suite.tests[0], 12)
+        self._assert_lineno_and_source(self.suite.tests[0], 14)
 
     def test_user_keyword(self):
-        self._assert_lineno_and_source(self.suite.resource.keywords[0], 24)
+        self._assert_lineno_and_source(self.suite.resource.keywords[0], 28)
 
     def test_keyword_call(self):
-        self._assert_lineno_and_source(self.suite.tests[0].body[0], 15)
-        self._assert_lineno_and_source(self.suite.resource.keywords[0].body[0], 27)
+        self._assert_lineno_and_source(self.suite.tests[0].body[0], 17)
+        self._assert_lineno_and_source(self.suite.resource.keywords[0].body[0], 31)
 
     def _assert_lineno_and_source(self, item, lineno):
         assert_equal(item.source, self.source)
@@ -262,7 +262,7 @@ class TestToFromDictAndJson(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        with open(CURDIR / '../../doc/schema/running.json') as file:
+        with open(CURDIR / '../../doc/schema/running.json', encoding='UTF-8') as file:
             schema = json.load(file)
         cls.validator = Draft202012Validator(schema=schema)
 
@@ -273,14 +273,6 @@ class TestToFromDictAndJson(unittest.TestCase):
                      name='N', args=tuple('args'), assign=('${result}',))
         self._verify(Keyword('Setup', type=Keyword.SETUP, lineno=1),
                      name='Setup', lineno=1)
-
-    def test_keyword_arguments_as_tuples(self):
-        self._verify(Keyword(args=[('arg',), (2,), ('name', 'value'), ('n2', 2)]),
-                     name='', args=(('arg',), (2,), ('name', 'value'), ('n2', 2)))
-
-    def test_keyword_arguments_as_positional_and_named_directly(self):
-        self._verify(Keyword(args=[('arg', 2), {'name': 'value', 'n2': 2}]),
-                     name='', args=(('arg', 2), {'name': 'value', 'n2': 2}))
 
     def test_for(self):
         self._verify(For(), type='FOR', assign=(), flavor='IN', values=(), body=[])

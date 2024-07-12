@@ -347,8 +347,8 @@ it. If that is needed, `listener version 3`_ can be used instead.
    |                  |                  | * `args`: Arguments passed to the library as a list.           |
    |                  |                  | * `originalname`: The original library name if the library has |
    |                  |                  |   been given an alias using `AS`, otherwise same as `name`.    |
-   |                  |                  | * `source`: An absolute path to the library source. `None`     |
-   |                  |                  |   if getting the                                               |
+   |                  |                  | * `source`: An absolute path to the library source. An empty   |
+   |                  |                  |   string if getting the                                        |
    |                  |                  |   source of the library failed for some reason.                |
    |                  |                  | * `importer`: An absolute path to the file importing the       |
    |                  |                  |   library. `None` when BuiltIn_ is imported as well as when    |
@@ -414,13 +414,10 @@ These methods get actual running and result model objects that used by Robot
 Framework itself, and listeners can both query information they need and
 change the model objects on the fly.
 
-Listener version 3 was enhanced heavily in Robot Framework 7.0 when it
-got `methods related to keywords and control structures`__. It still does not
-have methods related to library, resource file and variable file imports,
-but `the plan is to add them in Robot Framework 7.1`__.
-
-__ https://github.com/robotframework/robotframework/issues/3296
-__ https://github.com/robotframework/robotframework/issues/5008
+Listener version 3 was enhanced heavily in Robot Framework 7.0 when it got
+methods related to keywords and control structures. It was enhanced further
+in Robot Framework 7.1 when it got methods related to library, resource file
+and variable file imports.
 
 Listener version 3 has separate methods for library keywords, user keywords and
 all control structures. If there is a need to listen to all keyword related
@@ -566,11 +563,30 @@ and in the API docs of the optional ListenerV3_ base class.
    |                       |                  |                                                                    |
    |                       |                  | `message` is same object as with `log_message`.                    |
    +-----------------------+------------------+--------------------------------------------------------------------+
-   | library_import        | N/A              | Not currently implemented.                                         |
+   | library_import        | library,         | Called after a library has been imported.                          |
+   |                       | importer         |                                                                    |
+   |                       |                  | `library <running.TestLibrary_>`__ represents the imported library.|
+   |                       |                  | It can be inspected and also modified. `importer                   |
+   |                       |                  | <running.Import_>`__ contains information about the location where |
+   |                       |                  | the library was imported.                                          |
    +-----------------------+------------------+--------------------------------------------------------------------+
-   | resource_import       | N/A              | Not currently implemented.                                         |
+   | resource_import       | resource,        | Called after a resource file has been imported.                    |
+   |                       | importer         |                                                                    |
+   |                       |                  | `resource <running.ResourceFile_>`__ represents the imported       |
+   |                       |                  | resource file. It can be inspected and also modified. `importer    |
+   |                       |                  | <running.Import_>`__ contains information about the location where |
+   |                       |                  | the resource was imported.                                         |
    +-----------------------+------------------+--------------------------------------------------------------------+
-   | variables_import      | N/A              | Not currently implemented.                                         |
+   | variables_import      | attrs,           | Called after a variable file has been imported.                    |
+   |                       | importer         |                                                                    |
+   |                       |                  | `attrs` contains information about the imported variable file as   |
+   |                       |                  | a dictionary. It can be inspected, but modifications to it have no |
+   |                       |                  | effect. `importer <running.Import_>`__ contains information about  |
+   |                       |                  | the location where the variable file was imported.                 |
+   |                       |                  |                                                                    |
+   |                       |                  | This method will be changed in the future so that the `attrs`      |
+   |                       |                  | dictionary is replaced with an object representing the imported    |
+   |                       |                  | variable file.                                                     |
    +-----------------------+------------------+--------------------------------------------------------------------+
    | output_file           | path             | Called when writing to an `output file`_ is ready.                 |
    |                       |                  |                                                                    |
@@ -597,6 +613,12 @@ and in the API docs of the optional ListenerV3_ base class.
    |                       |                  | With `library listeners`_ called when the library goes out         |
    |                       |                  | of scope.                                                          |
    +-----------------------+------------------+--------------------------------------------------------------------+
+
+.. note:: Methods related to keywords and control structures are new in
+          Robot Framework 7.0.
+
+.. note:: Methods related to library, resource file and variable file imports
+          are new in Robot Framework 7.1.
 
 .. note:: Prior to Robot Framework 7.0, paths passed to result file related listener
           version 3 methods were strings.
@@ -773,6 +795,21 @@ If library creates a new listener instance every time when the library
 itself is instantiated, the actual listener instance to use will change
 according to the `library scope`_.
 
+Listener order
+--------------
+
+By default, listeners are called in the order they are taken into use so that
+listeners registered from the command line are called before library listeners.
+It is, however, possible to control the calling order by setting the special
+`ROBOT_LISTENER_ORDER` attribute to an integer or a floating point value.
+The bigger the number, the higher precedence the listener has and the earlier
+it is called. The number can be positive or negative and it is zero by default.
+
+The custom order does not affect the `close` method of library listeners, though.
+That method is always called when the library goes out of its scope.
+
+.. note:: Setting custom listener order is new in Robot Framework 7.1.
+
 Listener examples
 -----------------
 
@@ -936,7 +973,7 @@ as a class and also uses type hints:
 
         def end_test(self, data: running.TestCase, result: result.TestCase):
             elapsed_seconds = result.elapsed_time.total_seconds()
-            if result.status == 'PASS' and  elapsed_seconds > self.max_milliseconds:
+            if result.status == 'PASS' and elapsed_seconds > self.max_seconds:
                 result.status = 'FAIL'
                 result.message = 'Test execution took too long.'
 
@@ -950,15 +987,46 @@ case is not possible because it has already been written to the `output.xml`_
 file when listeners are called. Due to the same reason modifying already
 finished tests in the `end_suite` method has no effect either.
 
-Notice that although listeners can change status of any executed keyword or control
-structure, that does not directly affect the status of the executed test. In general
-listeners cannot directly fail keywords so that execution would stop or handle
-failures so that execution would continue. This kind of functionality may be
-added in the future if there are needs.
-
 This API is very similar to the `pre-Rebot modifier`_ API that can be used
 to modify results before report and log are generated. The main difference is
 that listeners modify also the created :file:`output.xml` file.
+
+Changing keyword and control structure status
+'''''''''''''''''''''''''''''''''''''''''''''
+
+Listeners can also affect the execution flow by changing statuses of the executed
+keywords and control structures. For example, if a listener changes the status of
+a passed keyword to FAIL, the keyword is considered failed exactly as if it had
+failed normally. Similarly, it is possible to change the status of a passed or
+failed keyword to SKIP to get the keyword and the whole test skipped. It is
+also possible to silence failures by changing the status to PASS, but this
+should be done only in special cases and with great care to avoid hiding real
+failures.
+
+The following example demonstrates changing the status by failing keywords
+that take too long time to execute. The previous example had similar logic
+with tests, but this listener also stops the execution immediately if there
+is a keyword that is too slow. As the example shows, listeners can also change
+the error message, not only the status.
+
+.. sourcecode:: python
+
+    from robot import result, running
+
+
+    class KeywordPerformanceMonitor:
+
+        def __init__(self, max_seconds: float = 0.1):
+            self.max_seconds = max_seconds
+
+        def end_keyword(self, data: running.Keyword, result: result.Keyword):
+            elapsed_seconds = result.elapsed_time.total_seconds()
+            if result.status == 'PASS' and elapsed_seconds > self.max_seconds:
+                result.status = 'FAIL'
+                result.message = 'Keyword execution took too long.'
+
+.. note:: Changes to status only affect the execution flow starting from
+          Robot Framework 7.1.
 
 More examples
 ~~~~~~~~~~~~~
