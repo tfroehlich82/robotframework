@@ -31,13 +31,14 @@ that can be used programmatically. Other code is for internal usage.
 """
 
 import sys
+from threading import current_thread
 
 if __name__ == '__main__' and 'robot' not in sys.modules:
     import pythonpathsetter
 
 from robot.conf import RobotSettings
 from robot.model import ModelModifier
-from robot.output import LOGGER, pyloggingconf
+from robot.output import librarylogger, LOGGER, pyloggingconf
 from robot.reporting import ResultWriter
 from robot.running.builder import TestSuiteBuilder
 from robot.utils import Application, text
@@ -341,6 +342,9 @@ Options
                           on:   always use colors
                           ansi: like `on` but use ANSI colors also on Windows
                           off:  disable colors altogether
+    --consolelinks auto|off  Control making paths to results files hyperlinks.
+                          auto: use links when colors are enabled (default)
+                          off: disable links unconditionally
  -K --consolemarkers auto|on|off  Show markers on the console when top level
                           keywords in a test case end. Values have same
                           semantics as with --consolecolors.
@@ -456,11 +460,13 @@ class RobotFramework(Application):
             old_max_assign_length = text.MAX_ASSIGN_LENGTH
             text.MAX_ERROR_LINES = settings.max_error_lines
             text.MAX_ASSIGN_LENGTH = settings.max_assign_length
+            librarylogger.RUN_THREAD = current_thread().name
             try:
                 result = suite.run(settings)
             finally:
                 text.MAX_ERROR_LINES = old_max_error_lines
                 text.MAX_ASSIGN_LENGTH = old_max_assign_length
+                librarylogger.RUN_THREAD = 'MainThread'
             LOGGER.info("Tests execution ended. Statistics:\n%s"
                         % result.suite.stat_message)
             if settings.log or settings.report or settings.xunit:

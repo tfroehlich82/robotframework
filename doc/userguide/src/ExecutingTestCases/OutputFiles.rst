@@ -58,7 +58,7 @@ giving a special value `NONE` to the :option:`--output` option. If no outputs
 are needed, they should all be explicitly disabled using
 `--output NONE --report NONE --log NONE`.
 
-The XML output file structure is documented in the :file:`robot.xsd` `schema file`_.
+The XML output file structure is documented in the :file:`result.xsd` `schema file`_.
 
 .. note:: Starting from Robot Framework 7.0, Rebot_ can read and write
           `JSON output files`_. The plan is to enhance the support for
@@ -349,6 +349,10 @@ Technically the test data related to each test case is saved into
 a JavaScript file in the same folder as the main log file. These files have
 names such as :file:`log-42.js` where :file:`log` is the base name of the
 main log file and :file:`42` is an incremented index.
+
+The JavaScript files are saved to the same directory where the `log file`_
+itself is saved. It is the common `output directory`_ by default, but
+it can be changed with the :option:`--log` command line option.
 
 .. note:: When copying the log files, you need to copy also all the
           :file:`log-*.js` files or some information will be missing.

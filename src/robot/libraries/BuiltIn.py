@@ -341,8 +341,8 @@ class _Converter(_BuiltInBase):
         - ``text:`` Converts text to bytes character by character. All
           characters with ordinal below 256 can be used and are converted to
           bytes with same values. Many characters are easiest to represent
-          using escapes like ``\x00`` or ``\xff``. Supports both Unicode
-          strings and bytes.
+          using escapes like ``\x00`` or ``\xff``. In practice this is the same
+          as Latin-1 encoding.
 
         - ``int:`` Converts integers separated by spaces to bytes. Similarly as
           with `Convert To Integer`, it is possible to use binary, octal, or
@@ -1042,7 +1042,7 @@ class _Verify(_BuiltInBase):
                        ignore_case=False, strip_spaces=False, collapse_spaces=False):
         """Fails if ``container`` does not contain ``item`` one or more times.
 
-        Works with strings, lists, and anything that supports Python's ``in``
+        Works with strings, lists, bytes, and anything that supports Python's ``in``
         operator.
 
         See `Should Be Equal` for an explanation on how to override the default
@@ -1063,15 +1063,28 @@ class _Verify(_BuiltInBase):
         arguments are strings, the comparison is done with all white spaces replaced by
         a single space character.
 
+        If the ``container`` is bytes and the ``item`` is a string, the ``item``
+        is automatically converted to bytes. Conversion is done using the ISO-8859-1
+        encoding that maps each Unicode code point directly to a matching byte.
+
         Examples:
         | Should Contain | ${output}    | PASS  |
         | Should Contain | ${some list} | value | msg=Failure! | values=False |
         | Should Contain | ${some list} | value | ignore_case=True |
 
-        ``strip_spaces`` is new in Robot Framework 4.0 and ``collapse_spaces`` is new
-        in Robot Framework 4.1.
+        ``strip_spaces`` is new in Robot Framework 4.0, ``collapse_spaces`` is new
+        in Robot Framework 4.1 and automatically converting ``item`` to bytes
+        is new in Robot Framework 7.1.
         """
         orig_container = container
+        if isinstance(container, (bytes, bytearray)):
+            if isinstance(item, str):
+                try:
+                    item = item.encode('ISO-8859-1')
+                except UnicodeEncodeError:
+                    raise ValueError(f'{item!r} cannot be encoded into bytes.')
+            elif isinstance(item, int) and item not in range(256):
+                raise ValueError(f'Byte must be in range 0-255, got {item}.')
         if ignore_case and is_string(item):
             item = item.casefold()
             if is_string(container):
@@ -1514,8 +1527,12 @@ class _Variables(_BuiltInBase):
         For the reasons explained in the `Using variables with keywords creating
         or accessing variables` section, using the escaped format is recommended.
 
+        Notice that ``default`` must be given positionally like ``example`` and
+        not using the named-argument syntax like ``default=example``. We hope to
+        be able to remove this limitation in the future.
+
         Examples:
-        | ${x} =    `Get Variable Value`    $a    default
+        | ${x} =    `Get Variable Value`    $a    example
         | ${y} =    `Get Variable Value`    $a    ${b}
         | ${z} =    `Get Variable Value`    $z
         =>
@@ -1554,7 +1571,7 @@ class _Variables(_BuiltInBase):
         return name, value
 
     @run_keyword_variant(resolve=0)
-    def variable_should_exist(self, name, msg=None):
+    def variable_should_exist(self, name, message=None):
         r"""Fails unless the given variable exists within the current scope.
 
         The name of the variable can be given either as a normal variable name
@@ -1562,7 +1579,10 @@ class _Variables(_BuiltInBase):
         For the reasons explained in the `Using variables with keywords creating
         or accessing variables` section, using the escaped format is recommended.
 
-        The default error message can be overridden with the ``msg`` argument.
+        The default error message can be overridden with the ``message`` argument.
+        Notice that it must be given positionally like ``A message`` and not
+        using the named-argument syntax like ``message=A message``. We hope to
+        be able to remove this limitation in the future.
 
         See also `Variable Should Not Exist` and `Keyword Should Exist`.
         """
@@ -1570,11 +1590,11 @@ class _Variables(_BuiltInBase):
         try:
             self._variables.replace_scalar(name)
         except VariableError:
-            raise AssertionError(self._variables.replace_string(msg)
-                                 if msg else f"Variable '{name}' does not exist.")
+            raise AssertionError(self._variables.replace_string(message)
+                                 if message else f"Variable '{name}' does not exist.")
 
     @run_keyword_variant(resolve=0)
-    def variable_should_not_exist(self, name, msg=None):
+    def variable_should_not_exist(self, name, message=None):
         r"""Fails if the given variable exists within the current scope.
 
         The name of the variable can be given either as a normal variable name
@@ -1582,7 +1602,10 @@ class _Variables(_BuiltInBase):
         For the reasons explained in the `Using variables with keywords creating
         or accessing variables` section, using the escaped format is recommended.
 
-        The default error message can be overridden with the ``msg`` argument.
+        The default error message can be overridden with the ``message`` argument.
+        Notice that it must be given positionally like ``A message`` and not
+        using the named-argument syntax like ``message=A message``. We hope to
+        be able to remove this limitation in the future.
 
         See also `Variable Should Exist` and `Keyword Should Exist`.
         """
@@ -1592,8 +1615,8 @@ class _Variables(_BuiltInBase):
         except VariableError:
             pass
         else:
-            raise AssertionError(self._variables.replace_string(msg)
-                                 if msg else f"Variable '{name}' exists.")
+            raise AssertionError(self._variables.replace_string(message)
+                                 if message else f"Variable '{name}' exists.")
 
     def replace_variables(self, text):
         """Replaces variables in the given text with their current values.
@@ -1697,8 +1720,12 @@ class _Variables(_BuiltInBase):
         variable in a user keyword, it is available both in the test case level
         and also in all other user keywords used in the current test. Other
         test cases will not see variables set with this keyword.
-        It is an error to call `Set Test Variable` outside the
-        scope of a test (e.g. in a Suite Setup or Teardown).
+
+        If `Set Test Variable` is used in suite setup, the variable is available
+        everywhere within that suite setup as well as in the corresponding suite
+        teardown, but it is not seen by tests or possible child suites. If the
+        keyword is used in a suite teardown, the variable is available only in that
+        teardown.
 
         See `Set Suite Variable` for more information and usage examples. See
         also the `Using variables with keywords creating or accessing variables`
@@ -1711,6 +1738,9 @@ class _Variables(_BuiltInBase):
 
         *NOTE:* The ``VAR`` syntax introduced in Robot Framework 7.0 is recommended
         over this keyword.
+
+        *NOTE:* Prior to Robot Framework 7.2, using `Set Test Variable` in a suite
+        setup or teardown was an error.
         """
         name = self._get_var_name(name)
         value = self._get_var_value(name, values)
@@ -2402,6 +2432,7 @@ class _RunKeyword(_BuiltInBase):
             try:
                 return self.run_keyword(name, *args)
             except ExecutionFailed as err:
+                self._reset_keyword_timeout_in_teardown(err, self._context)
                 if err.dont_continue or err.skip:
                     raise
                 count -= 1
@@ -2420,6 +2451,17 @@ class _RunKeyword(_BuiltInBase):
                             f"{secs_to_timestr(retry_interval)}."
                         )
             self._sleep_in_parts(sleep_time)
+
+    def _reset_keyword_timeout_in_teardown(self, err, context):
+        # Keyword timeouts in teardowns have been converted to normal failures
+        # to allow execution to continue on higher level:
+        # https://github.com/robotframework/robotframework/issues/3398
+        # We need to reset it here to not continue unnecessarily:
+        # https://github.com/robotframework/robotframework/issues/5237
+        if context.in_teardown:
+            timeouts = [t for t in context.timeouts if t.type == 'Keyword']
+            if timeouts and min(timeouts).timed_out():
+                err.keyword_timeout = True
 
     @run_keyword_variant(resolve=1)
     def set_variable_if(self, condition, *values):
@@ -3537,12 +3579,16 @@ class _Misc(_BuiltInBase):
             return re.escape(patterns[0])
         return [re.escape(p) for p in patterns]
 
-    def set_test_message(self, message, append=False):
+    def set_test_message(self, message, append=False, separator=' '):
         """Sets message for the current test case.
 
         If the optional ``append`` argument is given a true value (see `Boolean
         arguments`), the given ``message`` is added after the possible earlier
-        message by joining the messages with a space.
+        message.
+
+        An optional ``separator`` argument can be used to provide custom separator
+        string when appending to the old text. A single space is used as separator
+        by default.
 
         In test teardown this keyword can alter the possible failure message,
         but otherwise failures override messages set by this keyword. Notice
@@ -3559,19 +3605,21 @@ class _Misc(_BuiltInBase):
         | Set Test Message | `*`HTML`*` <b>Hello!</b> |                      |
 
         This keyword can not be used in suite setup or suite teardown.
+
+        The ``separator`` argument is new in Robot Framework 7.2.
         """
         test = self._context.test
         if not test:
             raise RuntimeError("'Set Test Message' keyword cannot be used in "
                                "suite setup or teardown.")
-        test.message = self._get_new_text(test.message, message,
-                                          append, handle_html=True)
+        test.message = self._get_new_text(
+            test.message, message, append, handle_html=True, separator=separator)
         if self._context.in_test_teardown:
             self._variables.set_test("${TEST_MESSAGE}", test.message)
         message, level = self._get_logged_test_message_and_level(test.message)
         self.log(f'Set test message to:\n{message}', level)
 
-    def _get_new_text(self, old, new, append, handle_html=False):
+    def _get_new_text(self, old, new, append, handle_html=False, separator=' '):
         if not is_string(new):
             new = str(new)
         if not (is_truthy(append) and old):
@@ -3581,35 +3629,43 @@ class _Misc(_BuiltInBase):
                 new = new[6:].lstrip()
                 if not old.startswith('*HTML*'):
                     old = f'*HTML* {html_escape(old)}'
+                separator = html_escape(separator)
             elif old.startswith('*HTML*'):
                 new = html_escape(new)
-        return f'{old} {new}'
+                separator = html_escape(separator)
+        return f'{old}{separator}{new}'
 
     def _get_logged_test_message_and_level(self, message):
         if message.startswith('*HTML*'):
             return message[6:].lstrip(), 'HTML'
         return message, 'INFO'
 
-    def set_test_documentation(self, doc, append=False):
+    def set_test_documentation(self, doc, append=False, separator=' '):
         """Sets documentation for the current test case.
 
-        By default the possible existing documentation is overwritten, but
+        The possible existing documentation is overwritten by default, but
         this can be changed using the optional ``append`` argument similarly
         as with `Set Test Message` keyword.
+
+        An optional ``separator`` argument can be used to provide custom separator
+        string when appending to the old text. A single space is used as separator
+        by default.
 
         The current test documentation is available as a built-in variable
         ``${TEST DOCUMENTATION}``. This keyword can not be used in suite
         setup or suite teardown.
+
+        The ``separator`` argument is new in Robot Framework 7.2.
         """
         test = self._context.test
         if not test:
             raise RuntimeError("'Set Test Documentation' keyword cannot be "
                                "used in suite setup or teardown.")
-        test.doc = self._get_new_text(test.doc, doc, append)
+        test.doc = self._get_new_text(test.doc, doc, append, separator=separator)
         self._variables.set_test('${TEST_DOCUMENTATION}', test.doc)
         self.log(f'Set test documentation to:\n{test.doc}')
 
-    def set_suite_documentation(self, doc, append=False, top=False):
+    def set_suite_documentation(self, doc, append=False, top=False, separator=' '):
         """Sets documentation for the current test suite.
 
         By default, the possible existing documentation is overwritten, but
@@ -3621,15 +3677,21 @@ class _Misc(_BuiltInBase):
         arguments`), the documentation of the top level suite is altered
         instead.
 
+        An optional ``separator`` argument can be used to provide custom separator
+        string when appending to the old text. A single space is used as separator
+        by default.
+
         The documentation of the current suite is available as a built-in
         variable ``${SUITE DOCUMENTATION}``.
+
+        The ``separator`` argument is new in Robot Framework 7.2.
         """
         suite = self._get_context(top).suite
-        suite.doc = self._get_new_text(suite.doc, doc, append)
+        suite.doc = self._get_new_text(suite.doc, doc, append, separator=separator)
         self._variables.set_suite('${SUITE_DOCUMENTATION}', suite.doc, top)
         self.log(f'Set suite documentation to:\n{suite.doc}')
 
-    def set_suite_metadata(self, name, value, append=False, top=False):
+    def set_suite_metadata(self, name, value, append=False, top=False, separator=' '):
         """Sets metadata for the current test suite.
 
         By default, possible existing metadata values are overwritten, but
@@ -3640,15 +3702,22 @@ class _Misc(_BuiltInBase):
         If the optional ``top`` argument is given a true value (see `Boolean
         arguments`), the metadata of the top level suite is altered instead.
 
+        An optional ``separator`` argument can be used to provide custom separator
+        string when appending to the old text. A single space is used as separator
+        by default.
+
         The metadata of the current suite is available as a built-in variable
         ``${SUITE METADATA}`` in a Python dictionary. Notice that modifying this
         variable directly has no effect on the actual metadata the suite has.
+
+        The ``separator`` argument is new in Robot Framework 7.2.
         """
         if not is_string(name):
             name = str(name)
         metadata = self._get_context(top).suite.metadata
         original = metadata.get(name, '')
-        metadata[name] = self._get_new_text(original, value, append)
+        metadata[name] = self._get_new_text(original, value, append,
+                                            separator=separator)
         self._variables.set_suite('${SUITE_METADATA}', metadata.copy(), top)
         self.log(f"Set suite metadata '{name}' to value '{metadata[name]}'.")
 

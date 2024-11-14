@@ -64,15 +64,19 @@ def end_test(data, result):
 
 
 def log_message(msg):
-    msg.message = msg.message.upper()
-    msg.timestamp = '2015-12-16 15:51:20.141'
+    if msg.message == 'Hello says "Fail"!' or msg.level == 'TRACE':
+        msg.message = None
+    else:
+        msg.message = msg.message.upper()
+        msg.timestamp = '2015-12-16 15:51:20.141'
 
 
 message = log_message
 
 
 def output_file(path):
-    print(f"Output: {path.name}", file=sys.__stderr__)
+    name = path.name if path is not None else 'None'
+    print(f"Output: {name}", file=sys.__stderr__)
 
 
 def log_file(path):

@@ -381,23 +381,28 @@ it. If that is needed, `listener version 3`_ can be used instead.
    +------------------+------------------+----------------------------------------------------------------+
    | output_file      | path             | Called when writing to an `output file`_ is ready.             |
    |                  |                  |                                                                |
-   |                  |                  | `path` is an absolute path to the file as a string.            |
+   |                  |                  | `path` is an absolute path to the file as a string or          |
+   |                  |                  | a string `None` if creating the output file is disabled.       |
    +------------------+------------------+----------------------------------------------------------------+
    | log_file         | path             | Called when writing to a `log file`_ is ready.                 |
    |                  |                  |                                                                |
    |                  |                  | `path` is an absolute path to the file as a string.            |
+   |                  |                  | Not called if creating the log file is disabled.               |
    +------------------+------------------+----------------------------------------------------------------+
    | report_file      | path             | Called when writing to a `report file`_ is ready.              |
    |                  |                  |                                                                |
    |                  |                  | `path` is an absolute path to the file as a string.            |
+   |                  |                  | Not called if creating the report file is disabled.            |
    +------------------+------------------+----------------------------------------------------------------+
    | xunit_file       | path             | Called when writing to an `xunit file`_ is ready.              |
    |                  |                  |                                                                |
    |                  |                  | `path` is an absolute path to the file as a string.            |
+   |                  |                  | Only called if creating the xunit file is enabled.             |
    +------------------+------------------+----------------------------------------------------------------+
    | debug_file       | path             | Called when writing to a `debug file`_ is ready.               |
    |                  |                  |                                                                |
    |                  |                  | `path` is an absolute path to the file as a string.            |
+   |                  |                  | Only called if creating the debug file is enabled.             |
    +------------------+------------------+----------------------------------------------------------------+
    | close            |                  | Called when the whole test execution ends.                     |
    |                  |                  |                                                                |
@@ -590,23 +595,28 @@ and in the API docs of the optional ListenerV3_ base class.
    +-----------------------+------------------+--------------------------------------------------------------------+
    | output_file           | path             | Called when writing to an `output file`_ is ready.                 |
    |                       |                  |                                                                    |
-   |                       |                  | `path` is an absolute path to the file as a `pathlib.Path` object. |
+   |                       |                  | `path` is an absolute path to the file as a `pathlib.Path` object  |
+   |                       |                  | or the `None` object if creating the output file is disabled.      |
    +-----------------------+------------------+--------------------------------------------------------------------+
    | log_file              | path             | Called when writing to a `log file`_ is ready.                     |
    |                       |                  |                                                                    |
    |                       |                  | `path` is an absolute path to the file as a `pathlib.Path` object. |
+   |                       |                  | Not called if creating the log file is disabled.                   |
    +-----------------------+------------------+--------------------------------------------------------------------+
    | report_file           | path             | Called when writing to a `report file`_ is ready.                  |
    |                       |                  |                                                                    |
    |                       |                  | `path` is an absolute path to the file as a `pathlib.Path` object. |
+   |                       |                  | Not called if creating the report file is disabled.                |
    +-----------------------+------------------+--------------------------------------------------------------------+
    | xunit_file            | path             | Called when writing to an `xunit file`_ is ready.                  |
    |                       |                  |                                                                    |
    |                       |                  | `path` is an absolute path to the file as a `pathlib.Path` object. |
+   |                       |                  | Only called if creating the xunit file is enabled.                 |
    +-----------------------+------------------+--------------------------------------------------------------------+
    | debug_file            | path             | Called when writing to a `debug file`_ is ready.                   |
    |                       |                  |                                                                    |
    |                       |                  | `path` is an absolute path to the file as a `pathlib.Path` object. |
+   |                       |                  | Only called if creating the debug file is enabled.                 |
    +-----------------------+------------------+--------------------------------------------------------------------+
    | close                 |                  | Called when the whole test execution ends.                         |
    |                       |                  |                                                                    |
@@ -795,20 +805,20 @@ If library creates a new listener instance every time when the library
 itself is instantiated, the actual listener instance to use will change
 according to the `library scope`_.
 
-Listener order
---------------
+Listener calling order
+----------------------
 
 By default, listeners are called in the order they are taken into use so that
 listeners registered from the command line are called before library listeners.
 It is, however, possible to control the calling order by setting the special
-`ROBOT_LISTENER_ORDER` attribute to an integer or a floating point value.
+`ROBOT_LISTENER_PRIORITY` attribute to an integer or a floating point value.
 The bigger the number, the higher precedence the listener has and the earlier
 it is called. The number can be positive or negative and it is zero by default.
 
 The custom order does not affect the `close` method of library listeners, though.
 That method is always called when the library goes out of its scope.
 
-.. note:: Setting custom listener order is new in Robot Framework 7.1.
+.. note:: Controlling listener calling order is new in Robot Framework 7.1.
 
 Listener examples
 -----------------
@@ -981,15 +991,28 @@ as a class and also uses type hints:
             if msg.level == 'WARN' and not msg.html:
                 msg.message = f'<b style="font-size: 1.5em">{msg.message}</b>'
                 msg.html = True
+            if self._message_is_not_relevant(msg.message):
+                msg.message = None
+
+        def _message_is_not_relevant(self, message: str) -> bool:
+            ...
 
 A limitation is that modifying the name of the current test suite or test
 case is not possible because it has already been written to the `output.xml`_
 file when listeners are called. Due to the same reason modifying already
 finished tests in the `end_suite` method has no effect either.
 
+When modifying logged messages, it is possible to remove a message altogether
+by setting `message` to `None` as the above example demonstrates. This can be
+used for removing sensitive or non-relevant messages so that there is nothing
+visible in the log file.
+
 This API is very similar to the `pre-Rebot modifier`_ API that can be used
 to modify results before report and log are generated. The main difference is
 that listeners modify also the created :file:`output.xml` file.
+
+.. note:: Removing messages altogether by setting them to `None` is new in
+          Robot Framework 7.2.
 
 Changing keyword and control structure status
 '''''''''''''''''''''''''''''''''''''''''''''
