@@ -78,6 +78,24 @@ Scopes
     Check Test Case    ${TESTNAME} 2
     Check Test Case    ${TESTNAME} 3
 
+Scalar without value when using non-local scope is deprecated
+    VAR    ${message}
+    ...    Using the VAR syntax to create a scalar variable without a value in
+    ...    other than the local scope like 'VAR \ \ \ \${scalar} \ \ \ scope=SUITE'
+    ...    is deprecated. In the future this syntax will promote an existing variable
+    ...    to the new scope. Use 'VAR \ \ \ \${scalar} \ \ \ \${EMPTY} \ \ \ scope=SUITE'
+    ...    instead.
+    ${tc} =    Check Test Case    ${TESTNAME} 1
+    Check Log Message    ${tc[1, 0]}     ${message}    level=WARN
+    Check Log Message    ${tc[1, 1]}     \${scalar} =
+    Check Log Message    ${ERRORS}[0]    ${message}    level=WARN
+    Check Test Case    ${TESTNAME} 2
+
+List and dict without value when using non-local scope creates empty value
+    Check Test Case    ${TESTNAME} 1
+    Check Test Case    ${TESTNAME} 2
+    Length Should Be    ${ERRORS}    1
+
 Invalid scope
     Check Test Case    ${TESTNAME}
 
@@ -122,9 +140,9 @@ With TRY
 *** Keywords ***
 Validate VAR
     [Arguments]    ${var}    ${name}    @{value}    ${scope}=${None}    ${separator}=${None}    ${log}
-    Should Be Equal    ${var.type}         VAR
-    Should Be Equal    ${var.name}         ${name}
-    Should Be Equal    ${var.value}        ${{tuple($value)}}
-    Should Be Equal    ${var.scope}        ${scope}
-    Should Be Equal    ${var.separator}    ${separator}
-    Check Log Message    ${var.msgs[0]}    ${name} = ${log}
+    Should Be Equal      ${var.type}         VAR
+    Should Be Equal      ${var.name}         ${name}
+    Should Be Equal      ${var.value}        ${{tuple($value)}}
+    Should Be Equal      ${var.scope}        ${scope}
+    Should Be Equal      ${var.separator}    ${separator}
+    Check Log Message    ${var[0]}           ${name} = ${log}

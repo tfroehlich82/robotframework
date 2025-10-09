@@ -18,28 +18,20 @@ from datetime import datetime
 from typing import Callable, Literal
 
 from robot.errors import DataError
-from robot.model import Message as BaseMessage, MessageLevel
+from robot.model import MessageLevel
+from robot.result import Message as BaseMessage
 from robot.utils import console_encode
 
+from .loglevel import LEVELS
 
-LEVELS = {
-  'NONE'  : 7,
-  'SKIP'  : 6,
-  'FAIL'  : 5,
-  'ERROR' : 4,
-  'WARN'  : 3,
-  'INFO'  : 2,
-  'DEBUG' : 1,
-  'TRACE' : 0,
-}
-PseudoLevel = Literal['HTML', 'CONSOLE']
+PseudoLevel = Literal["HTML", "CONSOLE"]
 
 
-def write_to_console(msg, newline=True, stream='stdout'):
+def write_to_console(msg, newline=True, stream="stdout"):
     msg = str(msg)
     if newline:
-        msg += '\n'
-    stream = sys.__stdout__ if stream.lower() != 'stderr' else sys.__stderr__
+        msg += "\n"
+    stream = sys.__stdout__ if stream.lower() != "stderr" else sys.__stderr__
     if stream:
         stream.write(console_encode(msg, stream=stream))
         stream.flush()
@@ -47,40 +39,34 @@ def write_to_console(msg, newline=True, stream='stdout'):
 
 class AbstractLogger:
 
-    def __init__(self, level='TRACE'):
-        self._is_logged = IsLogged(level)
-
-    def set_level(self, level):
-        return self._is_logged.set_level(level)
-
     def trace(self, msg):
-        self.write(msg, 'TRACE')
+        self.write(msg, "TRACE")
 
     def debug(self, msg):
-        self.write(msg, 'DEBUG')
+        self.write(msg, "DEBUG")
 
     def info(self, msg):
-        self.write(msg, 'INFO')
+        self.write(msg, "INFO")
 
     def warn(self, msg):
-        self.write(msg, 'WARN')
+        self.write(msg, "WARN")
 
     def fail(self, msg):
         html = False
         if msg.startswith("*HTML*"):
             html = True
             msg = msg[6:].lstrip()
-        self.write(msg, 'FAIL', html)
+        self.write(msg, "FAIL", html)
 
     def skip(self, msg):
         html = False
         if msg.startswith("*HTML*"):
             html = True
             msg = msg[6:].lstrip()
-        self.write(msg, 'SKIP', html)
+        self.write(msg, "SKIP", html)
 
     def error(self, msg):
-        self.write(msg, 'ERROR')
+        self.write(msg, "ERROR")
 
     def write(self, message, level, html=False):
         self.message(Message(message, level, html))
@@ -103,62 +89,40 @@ class Message(BaseMessage):
     Listeners can remove messages by setting the `message` attribute to `None`.
     These messages are not written to the output.xml at all.
     """
-    __slots__ = ['_message']
 
-    def __init__(self, message: 'str|None|Callable[[], str|None]',
-                 level: 'MessageLevel|PseudoLevel' = 'INFO',
-                 html: bool = False,
-                 timestamp: 'datetime|str|None' = None):
+    __slots__ = ("_message",)
+
+    def __init__(
+        self,
+        message: "str|None|Callable[[], str|None]" = "",
+        level: "MessageLevel|PseudoLevel" = "INFO",
+        html: bool = False,
+        timestamp: "datetime|str|None" = None,
+    ):
         level, html = self._get_level_and_html(level, html)
         super().__init__(message, level, html, timestamp or datetime.now())
 
-    def _get_level_and_html(self, level, html) -> 'tuple[MessageLevel, bool]':
+    def _get_level_and_html(self, level, html) -> "tuple[MessageLevel, bool]":
         level = level.upper()
-        if level == 'HTML':
-            return 'INFO', True
-        if level == 'CONSOLE':
-            return 'INFO', html
+        if level == "HTML":
+            return "INFO", True
+        if level == "CONSOLE":
+            return "INFO", html
         if level in LEVELS:
             return level, html
         raise DataError(f"Invalid log level '{level}'.")
 
     @property
-    def message(self) -> 'str|None':
+    def message(self) -> "str|None":
         self.resolve_delayed_message()
         return self._message
 
     @message.setter
-    def message(self, message: 'str|None|Callable[[], str|None]'):
-        if isinstance(message, str) and '\r\n' in message:
-            message = message.replace('\r\n', '\n')
+    def message(self, message: "str|None|Callable[[], str|None]"):
+        if isinstance(message, str) and "\r\n" in message:
+            message = message.replace("\r\n", "\n")
         self._message = message
 
     def resolve_delayed_message(self):
         if callable(self._message):
             self.message = self._message()
-
-
-class IsLogged:
-
-    def __init__(self, level):
-        self.level = level.upper()
-        self._int_level = self._level_to_int(level)
-
-    def __call__(self, level):
-        return self._level_to_int(level) >= self._int_level
-
-    def set_level(self, level):
-        old = self.level
-        self.__init__(level)
-        return old
-
-    @classmethod
-    def validate_level(cls, level):
-        cls._level_to_int(level)
-
-    @classmethod
-    def _level_to_int(cls, level):
-        try:
-            return LEVELS[level.upper()]
-        except KeyError:
-            raise DataError(f"Invalid log level '{level}'.")

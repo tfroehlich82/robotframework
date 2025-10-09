@@ -33,16 +33,18 @@ that can be used programmatically. Other code is for internal usage.
 import sys
 from threading import current_thread
 
-if __name__ == '__main__' and 'robot' not in sys.modules:
-    import pythonpathsetter
+if __name__ == "__main__" and "robot" not in sys.modules:
+    from pythonpathsetter import set_pythonpath
+
+    set_pythonpath()
 
 from robot.conf import RobotSettings
+from robot.errors import DataError
 from robot.model import ModelModifier
 from robot.output import librarylogger, LOGGER, pyloggingconf
 from robot.reporting import ResultWriter
 from robot.running.builder import TestSuiteBuilder
 from robot.utils import Application, text
-
 
 USAGE = """Robot Framework -- A generic automation framework
 
@@ -239,7 +241,6 @@ Options
                           pattern. Documentation is shown in `Test Details` and
                           also as a tooltip in `Statistics by Tag`. Pattern can
                           use `*`, `?` and `[]` as wildcards like --test.
-                          Documentation can contain formatting like --doc.
                           Examples: --tagdoc mytag:Example
                                     --tagdoc "owner-*:Original author"
     --tagstatlink pattern:link:title *  Add external links into `Statistics by
@@ -262,8 +263,8 @@ Options
                           all:     remove data from all keywords
                           passed:  remove data only from keywords in passed
                                    test cases and suites
-                          for:     remove passed iterations from for loops
-                          while:   remove passed iterations from while loops
+                          for:     remove passed iterations from FOR loops
+                          while:   remove passed iterations from WHILE loops
                           wuks:    remove all but the last failing keyword
                                    inside `BuiltIn.Wait Until Keyword Succeeds`
                           name:<pattern>:  remove data from keywords that match
@@ -404,6 +405,17 @@ ROBOT_SYSLOG_LEVEL        Log level to use when writing to the syslog file.
 ROBOT_INTERNAL_TRACES     When set to any non-empty value, Robot Framework's
                           internal methods are included in error tracebacks.
 
+Return Codes
+============
+
+0                         All tests passed.
+1-249                     Returned number of tests failed.
+250                       250 or more failures.
+251                       Help or version information printed.
+252                       Invalid data or command line options.
+253                       Execution stopped by user.
+255                       Unexpected internal error.
+
 Examples
 ========
 
@@ -429,30 +441,42 @@ $ robot tests.robot
 class RobotFramework(Application):
 
     def __init__(self):
-        super().__init__(USAGE, arg_limits=(1,), env_options='ROBOT_OPTIONS',
-                         logger=LOGGER)
+        super().__init__(
+            USAGE,
+            arg_limits=(1,),
+            env_options="ROBOT_OPTIONS",
+            logger=LOGGER,
+        )
 
     def main(self, datasources, **options):
         try:
             settings = RobotSettings(options)
-        except:
-            LOGGER.register_console_logger(stdout=options.get('stdout'),
-                                           stderr=options.get('stderr'))
+        except DataError:
+            LOGGER.register_console_logger(
+                stdout=options.get("stdout"),
+                stderr=options.get("stderr"),
+            )
             raise
         LOGGER.register_console_logger(**settings.console_output_config)
-        LOGGER.info(f'Settings:\n{settings}')
+        LOGGER.info(f"Settings:\n{settings}")
         if settings.pythonpath:
             sys.path = settings.pythonpath + sys.path
-        builder = TestSuiteBuilder(included_extensions=settings.extension,
-                                   included_files=settings.parse_include,
-                                   custom_parsers=settings.parsers,
-                                   rpa=settings.rpa,
-                                   lang=settings.languages,
-                                   allow_empty_suite=settings.run_empty_suite)
+        builder = TestSuiteBuilder(
+            included_extensions=settings.extension,
+            included_files=settings.parse_include,
+            custom_parsers=settings.parsers,
+            rpa=settings.rpa,
+            lang=settings.languages,
+            allow_empty_suite=settings.run_empty_suite,
+        )
         suite = builder.build(*datasources)
         if settings.pre_run_modifiers:
-            suite.visit(ModelModifier(settings.pre_run_modifiers,
-                                      settings.run_empty_suite, LOGGER))
+            modifier = ModelModifier(
+                settings.pre_run_modifiers,
+                settings.run_empty_suite,
+                LOGGER,
+            )
+            suite.visit(modifier)
         suite.configure(**settings.suite_config)
         settings.rpa = suite.validate_execution_mode()
         with pyloggingconf.robot_handler_enabled(settings.log_level):
@@ -460,18 +484,18 @@ class RobotFramework(Application):
             old_max_assign_length = text.MAX_ASSIGN_LENGTH
             text.MAX_ERROR_LINES = settings.max_error_lines
             text.MAX_ASSIGN_LENGTH = settings.max_assign_length
-            librarylogger.RUN_THREAD = current_thread().name
+            librarylogger.LOGGING_THREADS[0] = current_thread().name
             try:
                 result = suite.run(settings)
             finally:
                 text.MAX_ERROR_LINES = old_max_error_lines
                 text.MAX_ASSIGN_LENGTH = old_max_assign_length
-                librarylogger.RUN_THREAD = 'MainThread'
-            LOGGER.info("Tests execution ended. Statistics:\n%s"
-                        % result.suite.stat_message)
+                librarylogger.LOGGING_THREADS[0] = "MainThread"
+            LOGGER.info(
+                f"Tests execution ended. Statistics:\n{result.suite.stat_message}"
+            )
             if settings.log or settings.report or settings.xunit:
-                writer = ResultWriter(settings.output if settings.log
-                                      else result)
+                writer = ResultWriter(settings.output if settings.log else result)
                 writer.write_results(settings.get_rebot_settings())
         return result.return_code
 
@@ -479,8 +503,7 @@ class RobotFramework(Application):
         return self._filter_options_without_value(options), arguments
 
     def _filter_options_without_value(self, options):
-        return dict((name, value) for name, value in options.items()
-                    if value not in (None, []))
+        return {n: v for n, v in options.items() if v not in (None, [])}
 
 
 def run_cli(arguments=None, exit=True):
@@ -573,5 +596,5 @@ def run(*tests, **options):
     return RobotFramework().execute(*tests, **options)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     run_cli(sys.argv[1:])

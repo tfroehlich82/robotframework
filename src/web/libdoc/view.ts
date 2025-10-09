@@ -1,33 +1,49 @@
 import Mark from "mark.js";
 import Handlebars from "handlebars";
 import Storage from "./storage";
-import Translate from "./i18n/translate";
+import Translations from "./i18n/translations";
 import { createModal, showModal } from "./modal";
+import { RuntimeLibdoc } from "./types";
 import { regexpEscape, delay } from "./util";
+
+interface MatchInclude {
+  args?: boolean;
+  doc?: boolean;
+  name?: boolean;
+  tags?: boolean;
+  tagsExact?: boolean;
+}
 
 class View {
   storage: Storage;
   libdoc: RuntimeLibdoc;
-  translate: Translate;
+  translations: Translations;
   searchTime: number;
 
-  constructor(libdoc: RuntimeLibdoc, storage: Storage, translate: Translate) {
+  constructor(
+    libdoc: RuntimeLibdoc,
+    storage: Storage,
+    translations: Translations,
+  ) {
     this.libdoc = libdoc;
     this.storage = storage;
-    this.translate = translate;
-    this.initTemplating(translate);
+    this.translations = translations;
+    this.initTemplating(translations);
   }
 
-  private initTemplating(translate: Translate) {
-    Handlebars.registerHelper("t", function (key) {
-      return translate.getTranslation(key);
+  private initTemplating(translate: Translations) {
+    Handlebars.registerHelper("t", function (key: string) {
+      return translate.translate(key);
     });
-    Handlebars.registerHelper("encodeURIComponent", function (string) {
-      return encodeURIComponent(string);
+    Handlebars.registerHelper("encodeURIComponent", function (value: string) {
+      return encodeURIComponent(value);
     });
-    Handlebars.registerHelper("ifEquals", function (arg1, arg2, options) {
-      return arg1 == arg2 ? options.fn(this) : options.inverse(this);
-    });
+    Handlebars.registerHelper(
+      "ifEquals",
+      function (arg1: string, arg2: string, options) {
+        return arg1 == arg2 ? options.fn(this) : options.inverse(this);
+      },
+    );
     Handlebars.registerHelper("ifNotNull", function (arg1, options) {
       return arg1 !== null ? options.fn(this) : options.inverse(this);
     });
@@ -64,7 +80,9 @@ class View {
 
   private renderTemplates() {
     this.renderLibdocTemplate("base", this.libdoc, "#root");
-    this.renderImporting();
+    if (this.libdoc.inits.length > 0) {
+      this.renderImporting();
+    }
     this.renderShortcuts();
     this.renderKeywords();
     this.renderLibdocTemplate("data-types");
@@ -125,14 +143,14 @@ class View {
 
   private initLanguageMenu() {
     this.renderTemplate("language", {
-      languages: this.translate.getLanguages(),
+      languages: this.translations.getLanguageCodes(),
     });
     document.querySelectorAll("#language-container ul a")!.forEach((link) => {
-      if (link.innerHTML === this.translate.currentLanguage()) {
+      if (link.innerHTML === this.translations.currentLanguage()) {
         link.classList.toggle("selected");
       }
       link.addEventListener("click", () => {
-        const changed = this.translate.setLanguage(link.innerHTML);
+        const changed = this.translations.setLanguage(link.innerHTML);
         if (changed) {
           this.render();
         }
@@ -178,7 +196,7 @@ class View {
     );
   }
 
-  private renderKeywords(libdoc: Libdoc | null = null) {
+  private renderKeywords(libdoc: RuntimeLibdoc | null = null) {
     if (libdoc == null) {
       libdoc = this.libdoc;
     }
@@ -198,8 +216,8 @@ class View {
   }
 
   private getTheme() {
-    if (this.libdoc["theme"]) {
-      return this.libdoc["theme"];
+    if (this.libdoc.theme != null) {
+      return this.libdoc.theme;
     } else if (window.matchMedia("(prefers-color-scheme: dark)").matches) {
       return "dark";
     } else {
@@ -257,7 +275,11 @@ class View {
     }
   }
 
-  private highlightMatches(string: string, include, givenSearchTime?: number) {
+  private highlightMatches(
+    string: string,
+    include: MatchInclude,
+    givenSearchTime?: number,
+  ) {
     if (givenSearchTime && givenSearchTime !== this.searchTime) {
       return;
     }
@@ -283,10 +305,10 @@ class View {
       );
       if (include.tagsExact) {
         const filtered: Array<Element> = [];
-        for (const elem of matches) {
+        matches.forEach((elem) => {
           if (elem.textContent?.toUpperCase() == string.toUpperCase())
             filtered.push(elem);
-        }
+        });
         new Mark(filtered).mark(string);
       } else {
         new Mark(matches).mark(string);
@@ -296,7 +318,7 @@ class View {
 
   private markMatches(
     pattern: string,
-    include,
+    include: MatchInclude,
     givenSearchTime?: number,
     callback?: FrameRequestCallback,
   ) {
@@ -309,7 +331,7 @@ class View {
     }
     const regexp = new RegExp(patternRegexp, "i");
     const test = regexp.test.bind(regexp);
-    let result = {} as Libdoc;
+    let result = {} as RuntimeLibdoc;
     let keywordMatchCount = 0;
     result.keywords = this.libdoc.keywords.map((orig) => {
       const kw = { ...orig };
@@ -392,7 +414,7 @@ class View {
 
   private renderLibdocTemplate(
     name: string,
-    libdoc: Libdoc | null = null,
+    libdoc: RuntimeLibdoc | null = null,
     container_selector: string = "",
   ) {
     if (libdoc == null) {
