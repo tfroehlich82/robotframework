@@ -11,6 +11,7 @@ from pathlib import Path, PurePath
 from typing import Union
 
 from robot.api.deco import keyword
+from robot.api.types import KeywordName
 
 
 class MyEnum(Enum):
@@ -79,6 +80,10 @@ def string(argument: str, expected=None):
     _validate_type(argument, expected)
 
 
+def string_sub_type(argument: KeywordName, expected=None):
+    _validate_type(argument, expected)
+
+
 def bytes_(argument: bytes, expected=None):
     _validate_type(argument, expected)
 
@@ -138,6 +143,10 @@ def int_enum(argument: MyIntEnum, expected=None):
 
 
 def int_flag(argument: MyIntFlag, expected=None):
+    _validate_type(argument, expected)
+
+
+def none(argument: None, expected=None):
     _validate_type(argument, expected)
 
 

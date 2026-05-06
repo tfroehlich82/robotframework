@@ -20,7 +20,7 @@ from robot.errors import DataError
 
 from .console import ConsoleOutput
 from .filelogger import FileLogger
-from .loggerhelper import AbstractLogger
+from .loggerhelper import AbstractLogger, write_to_console
 from .stdoutlogsplitter import StdoutLogSplitter
 
 
@@ -186,23 +186,25 @@ class Logger(AbstractLogger):
         finally:
             self._cache_only = False
 
-    def log_message(self, msg, no_cache=False):
-        if self._log_message_parents and not self._library_import_logging:
-            self._log_message(msg, no_cache)
-        else:
-            self.message(msg)
-
-    def _log_message(self, msg, no_cache=False):
+    def log_message(self, msg):
         """Log messages written (mainly) by libraries."""
-        for logger in self:
-            logger.log_message(msg)
-        if (
-            self._log_message_parents
-            and self._output_file
-            and self._output_file.is_logged(msg)
-        ):
-            self._log_message_parents[-1].body.append(msg)
+        logged = False
+        # Common case. We can log normally.
+        if self._log_message_parents and not self._library_import_logging:
+            for logger in self:
+                logger.log_message(msg)
+            if self._output_file and self._output_file.is_logged(msg):
+                self._log_message_parents[-1].body.append(msg)
+            logged = True
+        # Handle warnings and errors as well as logging to console.
         if msg.level in ("WARN", "ERROR"):
+            self.message(msg)
+            logged = True
+        elif msg.console:
+            write_to_console(msg.message)
+            msg.console = False
+        # If not logged otherwise, log as a system message.
+        if not logged:
             self.message(msg)
 
     def log_output(self, output):

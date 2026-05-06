@@ -1,6 +1,5 @@
 *** Settings ***
 Library                  Annotations.py
-Library                  DeferredAnnotations.py
 Library                  OperatingSystem
 Resource                 conversion.resource
 
@@ -169,9 +168,14 @@ String
     String               []                        '[]'
     String               1.2                       '1.2'
     String               2                         '2'
+    String               ${{b'hyv\xe4'}}           'hyvä'
+    String               ${{bytearray([0, 1])}}    '\\x00\\x01'
     String               ${42}                     '42'
     String               ${None}                   'None'
     String               ${LIST}                   "['foo', 'bar']"
+
+String sub type
+    String sub type      Hello!                    'Hello!'
 
 Invalid string
     [Template]           Conversion Should Fail
@@ -184,6 +188,8 @@ Bytes
     Bytes                Hyvä esimerkki!           b'Hyv\\xE4 esimerkki!'
     Bytes                None                      b'None'
     Bytes                NONE                      b'NONE'
+    Bytes                ${82}                     b'R'
+    Bytes                ${{[82, '70', 33]}}       b'RF!'
     Bytes                ${{b'foo'}}               b'foo'
     Bytes                ${{bytearray(b'foo')}}    b'foo'
 
@@ -192,6 +198,9 @@ Invalid bytes
     Bytes                \u0100                    error=Character '\u0100' cannot be mapped to a byte.
     Bytes                \u00ff\u0100\u0101        error=Character '\u0100' cannot be mapped to a byte.
     Bytes                Hyvä esimerkki! \u2603    error=Character '\u2603' cannot be mapped to a byte.
+    Bytes                ${666}                    arg_type=integer    error=666 is not in range 0-255.
+    Bytes                ${{[1, '2', -3, 4]}}      arg_type=list       error=-3 is not in range 0-255.
+    Bytes                ${{[0, 'invalid']}}       arg_type=list       error='invalid' is not an integer.
     Bytes                ${1.3}                    arg_type=float
 
 Bytearray
@@ -200,6 +209,8 @@ Bytearray
     Bytearray            Hyvä esimerkki!           bytearray(b'Hyv\\xE4 esimerkki!')
     Bytearray            None                      bytearray(b'None')
     Bytearray            NONE                      bytearray(b'NONE')
+    Bytearray            ${82}                     bytearray(b'R')
+    Bytearray            ${{[82, '70', 33]}}       bytearray(b'RF!')
     Bytearray            ${{b'foo'}}               bytearray(b'foo')
     Bytearray            ${{bytearray(b'foo')}}    bytearray(b'foo')
 
@@ -208,6 +219,9 @@ Invalid bytearray
     Bytearray            \u0100                    error=Character '\u0100' cannot be mapped to a byte.
     Bytearray            \u00ff\u0100\u0101        error=Character '\u0100' cannot be mapped to a byte.
     Bytearray            Hyvä esimerkki! \u2603    error=Character '\u2603' cannot be mapped to a byte.
+    Bytearray            ${666}                    arg_type=integer    error=666 is not in range 0-255.
+    Bytearray            ${{[1, '2', -3, 4]}}      arg_type=list       error=-3 is not in range 0-255.
+    Bytearray            ${{[0, 'invalid']}}       arg_type=list       error='invalid' is not an integer.
     Bytearray            ${2123.1021}              arg_type=float
 
 Bytestring replacement
@@ -361,15 +375,22 @@ Invalid IntEnum
     IntFlag              3                         type=MyIntFlag        error=MyIntFlag does not have member '3'. Available: 'R (4)', 'W (2)' and 'X (1)'
     IntFlag              ${-1}                     type=MyIntFlag        error=MyIntFlag does not have value '-1'. Available: '1', '2' and '4'    arg_type=integer
 
+None
+    None                 None                      None
+    None                 NONE                      None
+    None                 ${EMPTY}                  None
+
 NoneType
     NoneType             None                      None
     NoneType             NONE                      None
+    NoneType             ${EMPTY}                  None
 
-Invalid NoneType
+Invalid None
     [Template]           Conversion Should Fail
-    NoneType             Hello, world!             type=None
+    None                 Hello, world!             type=None
+    None                 ${42}                     type=None    arg_type=integer
     NoneType             True                      type=None
-    NoneType             []                        type=None
+    NoneType             ${{[]}}                   type=None    arg_type=list
 
 List
     List                 []                        []
@@ -381,8 +402,6 @@ List
     List                 ${{(1, 2)}}               [1, 2]
     List                 ${DEQUE}                  [1, 2, 3]
     List                 ${SEQUENCE}               ['x']
-    List                 ${DICT}                   ['foo', 'bar']
-    List                 ${{(c for c in 'xy')}}    ['x', 'y']
 
 Invalid list
     [Template]           Conversion Should Fail
@@ -392,6 +411,7 @@ Invalid list
     List                 ${EMPTY}                  error=Invalid expression.
     List                 !"#¤%&/(inv expr)\=?      error=Invalid expression.
     List                 1 / 0                     error=Invalid expression.
+    List                 ${DICT}                   arg_type=DotDict
     List                 ${NONE}                   arg_type=None
 
 Sequence (abc)
@@ -400,8 +420,6 @@ Sequence (abc)
     Sequence             ${LIST}                   ${LIST}               same=True
     Sequence             ${DEQUE}                  ${DEQUE}              same=True
     Sequence             ${SEQUENCE}               ${SEQUENCE}           same=True
-    Sequence             ${DICT}                   ['foo', 'bar']
-    Sequence             ${{(c for c in 'xy')}}    ['x', 'y']
 
 MutableSequence (abc)
     Mutable sequence     []                        []
@@ -409,8 +427,6 @@ MutableSequence (abc)
     Mutable sequence     ${LIST}                   ${LIST}               same=True
     Mutable sequence     ${DEQUE}                  ${DEQUE}              same=True
     Mutable sequence     ${SEQUENCE}               ['x']
-    Mutable sequence     ${DICT}                   ['foo', 'bar']
-    Mutable sequence     ${{(c for c in 'xy')}}    ['x', 'y']
 
 Invalid sequence (abc)
     [Template]           Conversion Should Fail
@@ -421,6 +437,7 @@ Invalid sequence (abc)
     Sequence             ${EMPTY}                  type=Sequence         error=Invalid expression.
     Mutable sequence     !"#¤%&/(inv expr)\=?      type=Sequence         error=Invalid expression.
     Sequence             1 / 0                     type=Sequence         error=Invalid expression.
+    Mutable sequence     ${DICT}                   type=Sequence         arg_type=DotDict
 
 Tuple
     Tuple                ()                        ()
@@ -430,14 +447,13 @@ Tuple
     Tuple                ${{(1, 2)}}               (1, 2)
     Tuple                ${{[1, 2]}}               (1, 2)
     Tuple                ${DEQUE}                  (1, 2, 3)
-    Tuple                ${DICT}                   ('foo', 'bar')
-    Tuple                ${{(c for c in 'xy')}}    ('x', 'y')
 
 Invalid tuple
     [Template]           Conversion Should Fail
     Tuple                (1, ooops)                error=Invalid expression.
     Tuple                {}                        error=Value is dictionary, not tuple.
     Tuple                ooops                     error=Invalid expression.
+    Tuple                ${DICT}                   arg_type=DotDict
     Tuple                ${NONE}                   arg_type=None
 
 Dictionary
@@ -486,7 +502,6 @@ Set
     Set                  ${DEQUE}                  {1, 2, 3}
     Set                  ${MAPPING}                {'a'}
     Set                  ${DICT}                   {'foo', 'bar'}
-    Set                  ${{(c for c in 'xy')}}    {'x', 'y'}
 
 Invalid set
     [Template]           Conversion Should Fail
@@ -495,6 +510,7 @@ Invalid set
     Set                  ooops                     error=Invalid expression.
     Set                  {{'not', 'hashable'}}     error=Evaluating expression failed: *
     Set                  frozenset()               error=Invalid expression.
+    Set                  ${{(c for c in 'xy')}}    arg_type=generator
     Set                  ${NONE}                   arg_type=None
 
 Set (abc)
@@ -504,14 +520,12 @@ Set (abc)
     Set abc              ${DEQUE}                  {1, 2, 3}
     Set abc              ${MAPPING}                {'a'}
     Set abc              ${DICT}                   {'foo', 'bar'}
-    Set abc              ${{(c for c in 'xy')}}    {'x', 'y'}
     Mutable set          set()                     set()
     Mutable set          {'foo', 'bar'}            {'foo', 'bar'}
     Mutable set          {1, 2, 3.14, -42}         {1, 2, 3.14, -42}
     Mutable set          ${DEQUE}                  {1, 2, 3}
     Mutable set          ${MAPPING}                {'a'}
     Mutable set          ${DICT}                   {'foo', 'bar'}
-    Mutable set          ${{(c for c in 'xy')}}    {'x', 'y'}
 
 Invalid set (abc)
     [Template]           Conversion Should Fail
@@ -519,8 +533,8 @@ Invalid set (abc)
     Set abc              {}                        type=set              error=Value is dictionary, not set.
     Set abc              ooops                     type=set              error=Invalid expression.
     Mutable set          {1, ooops}                type=set              error=Invalid expression.
-    Mutable set          {}                        type=set              error=Value is dictionary, not set.
-    Mutable set          ooops                     type=set              error=Invalid expression.
+    Mutable set          ${{(c for c in 'xy')}}    type=set              arg_type=generator
+    Mutable set          ${NONE}                   type=set              arg_type=None
 
 Frozenset
     Frozenset            frozenset()               frozenset()
@@ -627,6 +641,19 @@ None as default with unknown type
     None as default with unknown type              ${42}                 42
     None as default with unknown type              None                  None
 
+Empty string when None is used as default but not as explicit type
+    [Documentation]
+    ...    Behavior depends on how `typing.get_type_hints` handles `arg: list = None`.
+    ...    Python < 3.11 considers it same as `arg: list | None = None`, newer don't.
+    IF    sys.version_info < (3, 11)
+        None as default                            ${EMPTY}              None
+        None as default with unknown type          ${EMPTY}              None
+    ELSE
+        Conversion Should Fail
+        ...    None as default                     ${EMPTY}              type=list    error=Invalid expression.
+        None as default with unknown type          ${EMPTY}              ''
+    END
+
 Forward references
     Forward referenced concrete type               42                    42
     Forward referenced ABC                         [1, 2]                [1, 2]
@@ -677,8 +704,3 @@ Explicit conversion failure is used if both conversions fail
     [Template]    Conversion Should Fail
     Type and default 4                             BANG!                 type=list         error=Invalid expression.
     Type and default 3                             BANG!                 type=timedelta    error=Invalid time string 'BANG!'.
-
-Deferred evaluation of annotations
-    [Tags]    require-py3.14
-    ${value} =    Deferred evaluation of annotations    PEP 649
-    Should be equal    ${value}    PEP 649

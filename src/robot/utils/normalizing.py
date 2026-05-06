@@ -17,6 +17,8 @@ import re
 from collections.abc import Iterable, Iterator, Mapping, Sequence
 from typing import MutableMapping, TypeVar
 
+from .robottypes import type_name
+
 V = TypeVar("V")
 Self = TypeVar("Self", bound="NormalizedDict")
 
@@ -74,19 +76,52 @@ class NormalizedDict(MutableMapping[str, V]):
         if initial:
             self.update(initial)
 
+    @classmethod
+    def fromkeys(
+        cls,
+        keys: "Iterable[str]",
+        value: "V | None" = None,
+        /,
+        *,
+        ignore: "Sequence[str]" = (),
+        caseless: bool = True,
+        spaceless: bool = True,
+    ) -> "NormalizedDict[V | None]":
+        """Convenience method to create a NormalizedDict from keys.
+
+        This matches ``dict.fromkeys`` but is not part of the Mapping API.
+
+        New in Robot Framework 7.4.1.
+        """
+        return cls(
+            dict.fromkeys(keys, value),
+            ignore=ignore,
+            caseless=caseless,
+            spaceless=spaceless,
+        )
+
     @property
     def normalized_keys(self) -> "tuple[str, ...]":
         return tuple(self._keys)
 
     def __getitem__(self, key: str) -> V:
+        if not isinstance(key, str):
+            raise KeyError(key)
         return self._data[self._normalize(key)]
 
     def __setitem__(self, key: str, value: V):
+        if not isinstance(key, str):
+            raise TypeError(
+                f"{type_name(self)} only accepts strings as keys, "
+                f"got {type_name(key)}."
+            )
         norm_key = self._normalize(key)
         self._data[norm_key] = value
         self._keys.setdefault(norm_key, key)
 
     def __delitem__(self, key: str):
+        if not isinstance(key, str):
+            raise KeyError(key)
         norm_key = self._normalize(key)
         del self._data[norm_key]
         del self._keys[norm_key]
@@ -123,7 +158,7 @@ class NormalizedDict(MutableMapping[str, V]):
     # Speed-ups. Following methods are faster than default implementations.
 
     def __contains__(self, key: str) -> bool:
-        return self._normalize(key) in self._data
+        return isinstance(key, str) and self._normalize(key) in self._data
 
     def clear(self):
         self._data.clear()

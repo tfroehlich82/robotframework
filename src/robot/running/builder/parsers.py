@@ -13,14 +13,16 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
+import re
 from abc import ABC
 from inspect import signature
 from pathlib import Path
+from textwrap import dedent
 
 from robot.conf import LanguagesLike
 from robot.errors import DataError
 from robot.parsing import File, get_init_model, get_model, get_resource_model
-from robot.utils import FileReader, get_error_message, read_rest_data, type_name
+from robot.utils import FileReader, get_error_message, type_name
 
 from ..model import TestSuite
 from ..resourcemodel import ResourceFile
@@ -113,8 +115,40 @@ class RestParser(RobotParser):
     extensions = (".robot.rst", ".rst", ".rest")
 
     def _get_source(self, source: Path) -> str:
+        from .restreader import read_rest_data
+
         with FileReader(source) as reader:
             return read_rest_data(reader)
+
+
+class MarkdownParser(RobotParser):
+    extensions = (".robot.md", ".md", ".markdown")
+
+    def _get_source(self, source: Path) -> str:
+        with FileReader(source) as reader:
+            return self._read_markdown_data(reader)
+
+    def _read_markdown_data(self, mdfile: FileReader) -> str:
+        fence_open = re.compile(r"\s*(`{3,}|~{3,})\s*(\S+)")
+        fence_close = None
+        blocks = []
+        block = None
+        for line in mdfile.readlines():
+            if block is None:
+                match = fence_open.match(line)
+                if match:
+                    fence, lang = match.groups()
+                    if lang.lower() in ("robotframework", "robot"):
+                        fence_close = re.compile(rf"\s*{fence[0]}{{{len(fence)},}}\s*")
+                        block = []
+            elif fence_close.fullmatch(line):
+                blocks.append(block)
+                block = None
+            else:
+                block.append(line)
+        if block:
+            blocks.append(block)
+        return "\n".join(dedent("".join(blk)) for blk in blocks)
 
 
 class JsonParser(Parser):

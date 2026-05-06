@@ -110,8 +110,6 @@ class _BaseSettings:
             return [self._process_metadata(v) for v in value]
         if name == "TagDoc":
             return [self._process_tagdoc(v) for v in value]
-        if name in ["Include", "Exclude"]:
-            return [self._format_tag_patterns(v) for v in value]
         if name in self._output_opts or name in ["ReRunFailed", "ReRunFailedSuites"]:
             if isinstance(value, Path):
                 return str(value)
@@ -174,7 +172,7 @@ class _BaseSettings:
             collect = show = level
         try:
             collect, show = LogLevel(collect), LogLevel(show)
-        except DataError as err:
+        except ValueError as err:
             self._raise_invalid("LogLevel", str(err))
         if collect.priority > show.priority:
             self._raise_invalid(
@@ -288,23 +286,7 @@ class _BaseSettings:
             pattern, title = pattern.rsplit(":", 1)
         else:
             title = ""
-        return self._format_tag_patterns(pattern), title
-
-    def _format_tag_patterns(self, pattern):
-        for search, replace in [
-            ("&", "AND"),
-            ("AND", " AND "),
-            ("OR", " OR "),
-            ("NOT", " NOT "),
-            ("_", " "),
-        ]:
-            if search in pattern:
-                pattern = pattern.replace(search, replace)
-        while "  " in pattern:
-            pattern = pattern.replace("  ", " ")
-        if pattern.startswith(" NOT"):
-            pattern = pattern[1:]
-        return pattern
+        return pattern, title
 
     def _process_tag_stat_link(self, value):
         tokens = value.split(":")
@@ -493,7 +475,7 @@ class _BaseSettings:
 
 class RobotSettings(_BaseSettings):
     _extra_cli_opts = {
-        "Extension"          : ("extension", (".robot", ".rbt", ".robot.rst")),
+        "Extension"          : ("extension", (".robot", ".rbt", ".robot.rst", ".robot.md")),
         "Output"             : ("output", "output.xml"),
         "LogLevel"           : ("loglevel", "INFO"),
         "MaxErrorLines"      : ("maxerrorlines", 40),

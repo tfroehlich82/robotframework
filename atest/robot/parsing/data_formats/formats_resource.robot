@@ -10,6 +10,7 @@ ${REST DIR}        ${FORMATS DIR}/rest
 ${JSON DIR}        ${FORMATS DIR}/json
 ${MIXED DIR}       ${FORMATS DIR}/mixed_data
 ${RESOURCE DIR}    ${FORMATS DIR}/resources
+${MARKDOWN DIR}    ${FORMATS DIR}/markdown
 @{SAMPLE TESTS}    Passing    Failing    User Keyword    Nön-äscïï    Own Tags    Default Tags    Variable Table
 ...                Resource File    Variable File    Library Import    Test Timeout    Keyword Timeout    Empty Rows    Document
 ...                Default Fixture    Overridden Fixture    Quotes    Escaping
@@ -17,7 +18,7 @@ ${RESOURCE DIR}    ${FORMATS DIR}/resources
 
 *** Keywords ***
 Previous Run Should Have Been Successful
-    Should Not Be Equal    ${SUITE}    ${None}    Running tests failed.    No Values
+    Should Not Be Equal    ${SUITE}    ${None}    Running tests failed.    values=False
 
 Run Sample File And Check Tests
     [Arguments]    ${options}    ${path}

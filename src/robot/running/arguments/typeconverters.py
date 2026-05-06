@@ -15,7 +15,7 @@
 
 from ast import literal_eval
 from collections import OrderedDict
-from collections.abc import Iterable, Mapping, Sequence, Set
+from collections.abc import Collection, Mapping, Sequence, Set
 from datetime import date, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 from enum import Enum
@@ -121,10 +121,10 @@ class TypeConverter:
 
     def convert(
         self,
-        value: Any,
+        value: object,
         name: "str|None" = None,
         kind: str = "Argument",
-    ) -> Any:
+    ) -> object:
         if self.no_conversion_needed(value):
             return value
         if not self._handles_value(value):
@@ -136,7 +136,7 @@ class TypeConverter:
         except ValueError as error:
             return self._handle_error(value, name, kind, error)
 
-    def no_conversion_needed(self, value: Any) -> bool:
+    def no_conversion_needed(self, value: object) -> bool:
         try:
             return isinstance(value, self.type_info.type)
         except TypeError:
@@ -208,10 +208,11 @@ class EnumConverter(TypeConverter):
     def value_types(self):
         return (str, int) if issubclass(self.type_info.type, int) else (str,)
 
-    def _convert(self, value):
+    def _non_string_convert(self, value):
+        return self._find_by_int_value(self.type_info.type, value)
+
+    def _string_convert(self, value):
         enum = self.type_info.type
-        if isinstance(value, int):
-            return self._find_by_int_value(enum, value)
         try:
             return enum[value]
         except KeyError:
@@ -285,7 +286,14 @@ class StringConverter(TypeConverter):
     def _handles_value(self, value):
         return True
 
-    def _convert(self, value):
+    def _string_convert(self, value):
+        return value
+
+    def _non_string_convert(self, value):
+        if isinstance(value, Secret):
+            raise ValueError
+        if isinstance(value, (bytes, bytearray)):
+            return value.decode("latin-1")
         try:
             return str(value)
         except Exception:
@@ -385,12 +393,25 @@ class DecimalConverter(TypeConverter):
 class BytesConverter(TypeConverter):
     type = bytes
     type_name = "bytes"
-    value_types = (str, bytearray)
+    value_types = (str, bytearray, Sequence, int)
 
-    def _non_string_convert(self, value):
-        return bytes(value)
+    def _non_string_convert(self, value: "bytearray | Sequence | int") -> bytes:
+        if isinstance(value, bytearray):
+            return bytes(value)
+        if isinstance(value, int):
+            value = [value]
+        return bytes([self._validate_int(v) for v in value])
 
-    def _string_convert(self, value):
+    def _validate_int(self, value: object) -> int:
+        try:
+            value = int(value)  # type: ignore
+        except Exception:
+            raise ValueError(f"{value!r} is not an integer.")
+        if value < 0 or value > 255:
+            raise ValueError(f"{value} is not in range 0-255.")
+        return value
+
+    def _string_convert(self, value: str) -> bytes:
         try:
             return value.encode("latin-1")
         except UnicodeEncodeError as err:
@@ -399,20 +420,18 @@ class BytesConverter(TypeConverter):
 
 
 @TypeConverter.register
-class ByteArrayConverter(TypeConverter):
+class ByteArrayConverter(BytesConverter):
     type = bytearray
     type_name = "bytearray"
-    value_types = (str, bytes)
+    value_types = (str, bytes, Sequence, int)
 
-    def _non_string_convert(self, value):
+    def _non_string_convert(self, value: "bytes | Sequence | int") -> bytearray:
+        if not isinstance(value, bytes):
+            value = super()._non_string_convert(value)
         return bytearray(value)
 
-    def _string_convert(self, value):
-        try:
-            return bytearray(value, "latin-1")
-        except UnicodeEncodeError as err:
-            invalid = value[err.start : err.start + 1]
-            raise ValueError(f"Character '{invalid}' cannot be mapped to a byte.")
+    def _string_convert(self, value: str) -> bytearray:
+        return bytearray(super()._string_convert(value))
 
 
 @TypeConverter.register
@@ -471,8 +490,8 @@ class NoneConverter(TypeConverter):
     def handles(cls, type_info: "TypeInfo") -> bool:
         return type_info.type in (NoneType, None)
 
-    def _convert(self, value):
-        if value.upper() == "NONE":
+    def _string_convert(self, value):
+        if value.upper() in ("NONE", ""):
             return None
         raise ValueError
 
@@ -481,7 +500,7 @@ class NoneConverter(TypeConverter):
 class SequenceConverter(TypeConverter):
     type = Sequence
     type_name = "Sequence"
-    value_types = (str, Iterable)
+    value_types = (str, Sequence)
 
     def no_conversion_needed(self, value):
         if (
@@ -538,7 +557,7 @@ class ListConverter(SequenceConverter):
 class TupleConverter(TypeConverter):
     type = tuple
     type_name = "tuple"
-    value_types = (str, Iterable)
+    value_types = (str, Sequence)
 
     @property
     def homogenous(self) -> bool:
@@ -625,7 +644,7 @@ class TypedDictConverter(TypeConverter):
     def _non_string_convert(self, value):
         return self._convert_items(value)
 
-    def _convert(self, value):
+    def _string_convert(self, value):
         return self._convert_items(self._literal_eval(value, dict))
 
     def _convert_items(self, value):
@@ -723,7 +742,7 @@ class SetConverter(TypeConverter):
     type = set
     abc = Set
     type_name = "set"
-    value_types = (str, Iterable)
+    value_types = (str, Collection)
 
     def no_conversion_needed(self, value):
         if isinstance(value, str) or not super().no_conversion_needed(value):
@@ -779,7 +798,13 @@ class UnionConverter(TypeConverter):
         return True
 
     def no_conversion_needed(self, value):
-        return any(converter.no_conversion_needed(value) for converter in self.nested)
+        for converter in self.nested:
+            if (
+                converter.no_conversion_needed(value)
+                and not isinstance(converter, ObjectConverter)
+            ):  # fmt:skip
+                return True
+        return False
 
     def _convert(self, value):
         unknown_types = False
@@ -820,7 +845,7 @@ class LiteralConverter(TypeConverter):
     def handles(cls, type_info: "TypeInfo") -> bool:
         return type_info.type is Literal
 
-    def no_conversion_needed(self, value: Any) -> bool:
+    def no_conversion_needed(self, value: object) -> bool:
         for info in self.type_info.nested:
             expected = info.type
             if value == expected and type(value) is type(expected):

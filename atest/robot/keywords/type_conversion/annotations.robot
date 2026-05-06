@@ -54,6 +54,9 @@ Invalid boolean
 String
     Check Test Case    ${TESTNAME}
 
+String sub type
+    Check Test Case    ${TESTNAME}
+
 Invalid string
     Check Test Case    ${TESTNAME}
 
@@ -126,10 +129,13 @@ Invalid Enum
 Invalid IntEnum
     Check Test Case    ${TESTNAME}
 
+None
+    Check Test Case    ${TESTNAME}
+
 NoneType
     Check Test Case    ${TESTNAME}
 
-Invalid NoneType
+Invalid None
     Check Test Case    ${TESTNAME}
 
 List
@@ -228,6 +234,9 @@ None as default with known type
 None as default with unknown type
     Check Test Case    ${TESTNAME}
 
+Empty string when None is used as default but not as explicit type
+    Check Test Case    ${TESTNAME}
+
 Forward references
     Check Test Case    ${TESTNAME}
 
@@ -256,9 +265,4 @@ Default value is used if explicit type conversion fails
     Check Test Case    ${TESTNAME}
 
 Explicit conversion failure is used if both conversions fail
-    Check Test Case    ${TESTNAME}
-
-Deferred evaluation of annotations
-    [Documentation]    https://peps.python.org/pep-0649
-    [Tags]    require-py3.14
     Check Test Case    ${TESTNAME}

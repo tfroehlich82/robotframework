@@ -1,4 +1,5 @@
 import time
+from contextlib import suppress
 
 from robot.api import logger
 from robot.libraries.BuiltIn import BuiltIn
@@ -19,13 +20,34 @@ def get_test_name():
     return BuiltIn().get_variables()["${TEST NAME}"]
 
 
-def set_secret_variable():
-    BuiltIn().set_test_variable("${SECRET}", "*****")
+def set_new_variable():
+    BuiltIn().set_test_variable("${NEW}", "Set by library!")
+
+
+def named_argument_syntax():
+    b = BuiltIn()
+    b.should_be_equal(b.get_variable_value("${existing}", default=123), 42)
+    b.should_be_equal(b.get_variable_value("${nonexisting}", default=123), 123)
+    b.variable_should_exist("${existing}", message="This succeeds!")
+    b.variable_should_not_exist("${nonexisting}", message="This succeeds!")
+    b.pass_execution_if(True, message="The end!")
 
 
 def use_run_keyword_with_non_string_values():
     BuiltIn().run_keyword("Log", 42)
     BuiltIn().run_keyword("Log", b"\xff")
+
+
+def use_get_variables_dictionary_with_non_string_keys():
+    variables = BuiltIn().get_variables()
+    with suppress(KeyError):
+        variables[123]
+    assert variables.get(123, 456)
+    assert 123 not in variables
+    with suppress(KeyError):
+        del variables[123]
+    assert variables.pop(123, 456)
+    variables[None] = 123
 
 
 def user_keyword_via_run_keyword():

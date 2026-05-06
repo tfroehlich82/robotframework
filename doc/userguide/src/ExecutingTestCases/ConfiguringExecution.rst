@@ -23,6 +23,7 @@ on the extension:
 - :file:`.robot` files and files that are not recognized are parsed using
   the normal `Robot Framework parser`__.
 - :file:`.rst` and :file:`.rest` files are parsed using the `reStructuredText parser`__.
+- :file:`.md` and :file:`.markdown` files are parsed using the `Markdown parser`__.
 - :file:`.rbt` and :file:`.json` files are parsed using the `JSON parser`__.
 - Files supported by `custom parsers`__ are parsed by a matching parser.
 
@@ -31,10 +32,12 @@ Examples::
     robot example.robot    # Standard Robot Framework parser.
     robot example.tsv      # Must be compatible with the standard parser.
     robot example.rst      # reStructuredText parser.
+    robot example.md       # Markdown parser.
     robot x.robot y.rst    # Parse both files using an appropriate parser.
 
 __ `Supported file formats`_
 __ `reStructuredText format`_
+__ `Markdown format`_
 __ `JSON format`_
 __ `Using custom parsers`_
 
@@ -48,6 +51,7 @@ the following rules:
   (:file:`_`) are ignored.
 - :file:`.robot` files are parsed using the normal `Robot Framework parser`__.
 - :file:`.robot.rst` files are parsed using the `reStructuredText parser`__.
+- :file:`.robot.md` files are parsed using the `Markdown parser`__.
 - :file:`.rbt` files are parsed using the `JSON parser`__.
 - Files supported by `custom parsers`__ are parsed by a matching parser.
 - Other files are ignored unless parsing them has been enabled by using
@@ -57,6 +61,7 @@ the following rules:
 __ `Suite directories`_
 __ `Supported file formats`_
 __ `reStructuredText format`_
+__ `Markdown format`_
 __ `JSON format`_
 __ `Using custom parsers`_
 
@@ -98,6 +103,7 @@ even if they by `default would not be`__. What parser to use depends on
 the used extension:
 
 - :file:`.rst` and :file:`.rest` files are parsed using the `reStructuredText parser`__.
+- :file:`.md` and :file:`.markdown` files are parsed using the `Markdown parser`__.
 - :file:`.json` files are parsed using the `JSON parser`__.
 - Other files are parsed using the normal `Robot Framework parser`__.
 
@@ -109,6 +115,7 @@ to quote or escape the pattern like `'*.robot'` or `\*.robot`.
 
 __ `Included and excluded files`_
 __ `reStructuredText format`_
+__ `Markdown format`_
 __ `JSON format`_
 __ `Supported file formats`_
 
@@ -217,13 +224,13 @@ specified tests in specified suites are selected::
 
 Using the :option:`--suite` option is more or less the same as executing
 the appropriate suite file or directory directly. The main difference is
-that if a file or directory is run directly, possible suite setups and teardowns
-on higher level are not executed::
+that if a file or directory is run directly, possible higher level
+`suite initialization files`_ are ignored::
 
-  # Root suite is 'Tests' and its possible setup and teardown are run.
+  # Root suite is 'Tests' and its possible initialization file is used.
   robot --suite example path/to/tests
 
-  # Root suite is 'Example' and possible higher level setups and teardowns are ignored.
+  # Root suite is 'Example' and higher level initialization files are ignored.
   robot path/to/tests/example.robot
 
 Prior to Robot Framework 6.1, files not matching the :option:`--suite` option
@@ -724,9 +731,6 @@ the file is in the `module search path`_, it could be used like this::
 
     # Specify the modifier as a name. Run every third test, starting from the second.
     robot --prerunmodifier SelectEveryXthTest:3:1 tests.robot
-
-.. note:: Argument conversion based on type hints like `x: int` in the above
-          example is new in Robot Framework 4.0 and requires Python 3.
 
 Example: Exclude tests by name
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

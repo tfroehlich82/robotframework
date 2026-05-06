@@ -58,14 +58,19 @@ kw 6
     ...                Another line.
     ...                Tags: foo, bar
     [Tags]             foo    dar
+    [Arguments]    ${a: int}    ${b: Literal["R", "F"]}    ${c: int | None}=None
     No Operation
 
 Different argument types
     [Arguments]    ${mandatory}    ${optional}=default    @{varargs}
-    ...            ${kwo}=default    ${another}    &{kwargs}
+    ...            ${kwo: int}=default    ${another}    &{kwargs}
     No Operation
 
 Embedded ${arguments}
+    No Operation
+
+With embedded ${arg: int} and normal arg
+    [Arguments]    ${normal}
     No Operation
 
 curdir  [Documentation]  ${CURDIR}
