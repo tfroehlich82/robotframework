@@ -71,8 +71,8 @@ class TestSuiteBuilder:
         ),
         included_files: Sequence[str] = (),
         custom_parsers: Sequence[str] = (),
-        defaults: "TestDefaults|None" = None,
-        rpa: "bool|None" = None,
+        defaults: "TestDefaults | None" = None,
+        rpa: "bool | None" = None,
         lang: LanguagesLike = None,
         allow_empty_suite: bool = False,
         process_curdir: bool = True,
@@ -165,7 +165,7 @@ class TestSuiteBuilder:
                 custom_parsers[ext] = custom_parser
         return custom_parsers
 
-    def build(self, *paths: "Path|str") -> TestSuite:
+    def build(self, *paths: "Path | str") -> TestSuite:
         """
         :param paths: Paths to test data files or directories.
         :return: :class:`~robot.running.model.TestSuite` instance.
@@ -183,7 +183,7 @@ class TestSuiteBuilder:
         suite.remove_empty_suites(preserve_direct_children=len(paths) > 1)
         return suite
 
-    def _normalize_paths(self, paths: "Sequence[Path|str]") -> "tuple[Path, ...]":
+    def _normalize_paths(self, paths: "Sequence[Path | str]") -> "tuple[Path, ...]":
         if not paths:
             raise DataError("One or more source paths required.")
         # Cannot use `Path.resolve()` here because it resolves all symlinks which
@@ -199,7 +199,7 @@ class TestSuiteBuilder:
             )
         return tuple(paths)
 
-    def _get_parsers(self, paths: "Sequence[Path]") -> "dict[str|None, Parser]":
+    def _get_parsers(self, paths: "Sequence[Path]") -> "dict[str | None, Parser]":
         parsers = {None: NoInitFileDirectoryParser(), **self.custom_parsers}
         robot_parser = self.standard_parsers["robot"]
         for ext in (
@@ -212,7 +212,7 @@ class TestSuiteBuilder:
                 parsers[ext] = self.standard_parsers.get(ext, robot_parser)
         return parsers
 
-    def _get_ext(self, path: "str|Path") -> str:
+    def _get_ext(self, path: "str | Path") -> str:
         if not isinstance(path, Path):
             path = Path(path)
         return "".join(path.suffixes)
@@ -229,18 +229,18 @@ class SuiteStructureParser(SuiteStructureVisitor):
 
     def __init__(
         self,
-        parsers: "dict[str|None, Parser]",
-        defaults: "TestDefaults|None" = None,
-        rpa: "bool|None" = None,
+        parsers: "dict[str | None, Parser]",
+        defaults: "TestDefaults | None" = None,
+        rpa: "bool | None" = None,
     ):
         self.parsers = parsers
         self.rpa = rpa
         self.defaults = defaults
-        self.suite: "TestSuite|None" = None
-        self._stack: "list[tuple[TestSuite, TestDefaults]]" = []
+        self.suite: TestSuite | None = None
+        self._stack: list[tuple[TestSuite, TestDefaults]] = []
 
     @property
-    def parent_defaults(self) -> "TestDefaults|None":
+    def parent_defaults(self) -> "TestDefaults | None":
         return self._stack[-1][-1] if self._stack else self.defaults
 
     def parse(self, structure: SuiteStructure) -> TestSuite:
@@ -278,27 +278,26 @@ class SuiteStructureParser(SuiteStructureVisitor):
                 suite.rpa = True
 
     def _build_suite_file(self, structure: SuiteFile):
-        source = cast(Path, structure.source)
-        defaults = self.parent_defaults or TestDefaults()
         parser = self.parsers[structure.extension]
+        defaults = self.parent_defaults or TestDefaults()
         try:
-            suite = parser.parse_suite_file(source, defaults)
+            suite = parser.parse_suite_file(structure.source, defaults)
             if not suite.tests:
-                LOGGER.info(f"Data source '{source}' has no tests or tasks.")
+                LOGGER.info(f"Data source '{structure.source}' has no tests or tasks.")
         except DataError as err:
-            raise DataError(f"Parsing '{source}' failed: {err.message}") from err
+            raise DataError(f"Parsing '{structure.source}' failed: {err}") from err
         return suite
 
     def _build_suite_directory(self, structure: SuiteDirectory):
-        source = cast(Path, structure.init_file or structure.source)
-        defaults = TestDefaults(self.parent_defaults)
         parser = self.parsers[structure.extension]
+        defaults = TestDefaults(self.parent_defaults)
+        source = cast(Path, structure.init_file or structure.source)
         try:
             suite = parser.parse_init_file(source, defaults)
             if structure.is_multi_source:
                 suite.config(name="", source=None)
         except DataError as err:
-            raise DataError(f"Parsing '{source}' failed: {err.message}")
+            raise DataError(f"Parsing '{source}' failed: {err}") from err
         return suite, defaults
 
 

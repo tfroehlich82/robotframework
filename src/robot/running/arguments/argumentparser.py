@@ -35,13 +35,13 @@ class ArgumentParser(ABC):
     def __init__(
         self,
         type: str = "Keyword",
-        error_reporter: "Callable[[str], None]|None" = None,
+        error_reporter: "Callable[[str], None] | None" = None,
     ):
         self.type = type
         self.error_reporter = error_reporter
 
     @abstractmethod
-    def parse(self, source: Any, name: "str|None" = None) -> ArgumentSpec:
+    def parse(self, source: Any, name: "str | None" = None) -> ArgumentSpec:
         raise NotImplementedError
 
     def _report_error(self, error: str):
@@ -59,7 +59,7 @@ class PythonArgumentParser(ArgumentParser):
             sig = signature(method, **config)
         except ValueError:  # Can occur with C functions (incl. many builtins).
             return ArgumentSpec(name, self.type, var_positional="args")
-        except TypeError as err:  # Occurs if handler isn't actually callable.
+        except Exception as err:
             raise DataError(str(err))
         parameters = list(sig.parameters.values())
         # `inspect.signature` drops `self` with bound methods and that's the case when

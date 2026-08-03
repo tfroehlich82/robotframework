@@ -1,5 +1,6 @@
 import os
 import unittest
+import warnings
 from os.path import abspath
 
 from robot.utils import expand_variables
@@ -9,7 +10,7 @@ from robot.utils.asserts import (
 from robot.utils.text import (
     _ERROR_CUT_EXPLN, _get_virtual_line_length, _MAX_ERROR_LINE_LENGTH,
     cut_long_message, get_console_length, getdoc, getshortdoc, MAX_ERROR_LINES,
-    pad_console_length, split_args_from_name_or_path, split_tags_from_doc
+    pad_console_length, split_args_from_name_or_path
 )
 
 _HALF_ERROR_LINES = MAX_ERROR_LINES // 2
@@ -209,6 +210,8 @@ class TestDocSplitter(unittest.TestCase):
             self._assert_doc_and_tags(doc, doc.rstrip(), [])
 
     def _assert_doc_and_tags(self, original, expected_doc, expected_tags):
+        with warnings.catch_warnings(record=True):
+            from robot.utils import split_tags_from_doc
         doc, tags = split_tags_from_doc(original)
         assert_equal(doc, expected_doc)
         assert_equal(tags, expected_tags)
@@ -272,81 +275,67 @@ class TestDocSplitter(unittest.TestCase):
 
 class TestSplitArgsFromNameOrPath(unittest.TestCase):
 
-    def setUp(self):
-        self.method = split_args_from_name_or_path
+    def verify(self, value, expected):
+        assert_equal(split_args_from_name_or_path(value), expected)
 
     def test_with_no_args(self):
         assert not os.path.exists("name"), "does not work if you have name folder!"
-        assert_equal(self.method("name"), ("name", []))
+        self.verify("name", ("name", []))
 
     def test_with_args(self):
         assert not os.path.exists("name"), "does not work if you have name folder!"
-        assert_equal(self.method("name:arg"), ("name", ["arg"]))
-        assert_equal(self.method("listener:v1:v2:v3"), ("listener", ["v1", "v2", "v3"]))
-        assert_equal(self.method("aa:bb:cc"), ("aa", ["bb", "cc"]))
+        self.verify("name:arg", ("name", ["arg"]))
+        self.verify("listener:v1:v2:v3", ("listener", ["v1", "v2", "v3"]))
+        self.verify("aa:bb:cc", ("aa", ["bb", "cc"]))
 
     def test_empty_args(self):
         assert not os.path.exists("foo"), "does not work if you have foo folder!"
-        assert_equal(self.method("foo:"), ("foo", [""]))
-        assert_equal(self.method("bar:arg1::arg3"), ("bar", ["arg1", "", "arg3"]))
-        assert_equal(self.method("3:"), ("3", [""]))
+        self.verify("foo:", ("foo", [""]))
+        self.verify("bar:arg1::arg3", ("bar", ["arg1", "", "arg3"]))
+        self.verify("3:", ("3", [""]))
 
     def test_semicolon_as_separator(self):
-        assert_equal(self.method("name;arg"), ("name", ["arg"]))
-        assert_equal(self.method("name;1;2;3"), ("name", ["1", "2", "3"]))
-        assert_equal(self.method("name;"), ("name", [""]))
+        self.verify("name;arg", ("name", ["arg"]))
+        self.verify("name;1;2;3", ("name", ["1", "2", "3"]))
+        self.verify("name;", ("name", [""]))
 
     def test_alternative_separator_in_value(self):
-        assert_equal(self.method("name;v:1;v:2"), ("name", ["v:1", "v:2"]))
-        assert_equal(self.method("name:v;1:v;2"), ("name", ["v;1", "v;2"]))
+        self.verify("name;v:1;v:2", ("name", ["v:1", "v:2"]))
+        self.verify("name:v;1:v;2", ("name", ["v;1", "v;2"]))
 
     def test_windows_path_without_args(self):
-        assert_equal(self.method("C:\\name.py"), ("C:\\name.py", []))
-        assert_equal(self.method("X:\\APPS\\listener"), ("X:\\APPS\\listener", []))
-        assert_equal(self.method("C:/varz.py"), ("C:/varz.py", []))
+        self.verify("C:\\name.py", ("C:\\name.py", []))
+        self.verify("X:\\APPS\\listener", ("X:\\APPS\\listener", []))
+        self.verify("C:/varz.py", ("C:/varz.py", []))
 
     def test_windows_path_with_args(self):
-        assert_equal(
-            self.method("C:\\name.py:arg1"),
-            ("C:\\name.py", ["arg1"]),
-        )
-        assert_equal(
-            self.method("D:\\APPS\\listener:v1:b2:z3"),
-            ("D:\\APPS\\listener", ["v1", "b2", "z3"]),
-        )
-        assert_equal(
-            self.method("C:/varz.py:arg"),
-            ("C:/varz.py", ["arg"]),
-        )
-        assert_equal(
-            self.method("C:\\file.py:arg;with;alternative;separator"),
+        self.verify("C:\\name.py:arg1", ("C:\\name.py", ["arg1"]))
+        self.verify("D:\\APPS\\listener:a:b:c", ("D:\\APPS\\listener", ["a", "b", "c"]))
+        self.verify("C:/varz.py:arg", ("C:/varz.py", ["arg"]))
+        self.verify(
+            "C:\\file.py:arg;with;alternative;separator",
             ("C:\\file.py", ["arg;with;alternative;separator"]),
         )
 
     def test_windows_path_with_semicolon_separator(self):
-        assert_equal(
-            self.method("C:\\name.py;arg1"),
-            ("C:\\name.py", ["arg1"]),
-        )
-        assert_equal(
-            self.method("D:\\APPS\\listener;v1;b2;z3"),
-            ("D:\\APPS\\listener", ["v1", "b2", "z3"]),
-        )
-        assert_equal(
-            self.method("C:/varz.py;arg"),
-            ("C:/varz.py", ["arg"]),
-        )
-        assert_equal(
-            self.method("C:\\file.py;arg:with:alternative:separator"),
+        self.verify("C:\\name.py;arg1", ("C:\\name.py", ["arg1"]))
+        self.verify("D:\\APPS\\listener;a;b;c", ("D:\\APPS\\listener", ["a", "b", "c"]))
+        self.verify("C:/varz.py;arg", ("C:/varz.py", ["arg"]))
+        self.verify(
+            "C:\\file.py;arg:with:alternative:separator",
             ("C:\\file.py", ["arg:with:alternative:separator"]),
         )
+
+    def test_non_alpha_cannot_be_drive_letter(self):
+        self.verify("?:/;", ("?", ["/;"]))
+        self.verify(r"1:\;;::", ("1", [r"\;;", "", ""]))
 
     def test_existing_paths_are_made_absolute(self):
         path = "robot-framework-unit-test-file-12q3405909qasf"
         open(path, "w", encoding="ASCII").close()
         try:
-            assert_equal(self.method(path), (abspath(path), []))
-            assert_equal(self.method(path + ":arg"), (abspath(path), ["arg"]))
+            self.verify(path, (abspath(path), []))
+            self.verify(path + ":arg", (abspath(path), ["arg"]))
         finally:
             os.remove(path)
 
@@ -357,7 +346,7 @@ class TestSplitArgsFromNameOrPath(unittest.TestCase):
         path = "robot:framework:test:1:2:42"
         os.mkdir(path)
         try:
-            assert_equal(self.method(path), (abspath(path), []))
+            self.verify(path, (abspath(path), []))
         finally:
             os.rmdir(path)
 

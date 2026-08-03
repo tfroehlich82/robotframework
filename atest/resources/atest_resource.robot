@@ -265,9 +265,17 @@ Stderr Should Contain Regexp
     [Arguments]    @{expected}
     File Should Contain Regexp    ${STDERR_FILE}    @{expected}
 
+Stdout Should Be Equal To
+    [Arguments]    @{expected}
+    File Should Be Equal To    ${STDOUT_FILE}    @{expected}
+
 Stdout Should Contain
     [Arguments]    @{expected}    ${count}=None
     File Should Contain    ${STDOUT_FILE}    @{expected}    count=${count}
+
+Stdout Should Be Empty
+    ${stdout} =    Get Stdout
+    Should Be Empty    ${stdout}    Unexpected console output:\n${stdout}
 
 Stdout Should Not Contain
     [Arguments]    @{expected}

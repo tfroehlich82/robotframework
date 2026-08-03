@@ -76,7 +76,7 @@ Type Docs
     Usages Should Be                0    Standard    integer    Different argument types    kw 6
     DataType Standard Should Be     1    Literal     Only specified values are accepted.
     Usages Should Be                1    Standard    Literal    kw 6
-    DataType Standard Should Be     2    None        String ``NONE`` (case-insensitive) and
+    DataType Standard Should Be     2    None        String `NONE` (case-insensitive) and
     Usages Should Be                2    Standard    None    kw 6
 
 Keyword Documentation
@@ -100,10 +100,13 @@ Keyword Documentation
     ...
     ...    | = first = | = second = |
     ...    | foo${SPACE*7}|${SPACE*4}bar${SPACE*5}|
+    ...
+    ...    Tags not only on the last line is new in RF 7.5.
     Keyword Doc Should Be           9
     ...    Summary line
     ...
-    ...    Another line.
+    ...    Second doc paragraph. Not having an empty row
+    ...    before tags is deprecated since RF 7.5.
 
 Deprecation
     Keyword Doc Should Be           1    *DEPRECATED* for some reason.
@@ -118,13 +121,17 @@ Keyword tags
     Keyword Tags Should Be          8    \${3}   a    b
     Keyword Tags Should Be          9    bar    common    dar    foo
 
+Not having empty row before `Tags:` in documentation is deprecated
+    Should Start With    ${OUTPUT}
+    ...    [ WARN ] Invalid documentation in 'kw 6': Not having an empty row before 'Tags:' is deprecated.
+
 Non ASCII
     Keyword Doc Should Be           10    Hyvää yötä.\n\nСпасибо!
 
 Keyword Source Info
     Keyword Name Should Be            0    curdir
     Keyword Should Not Have Source    0
-    Keyword Lineno Should Be          0    76
+    Keyword Lineno Should Be          0    82
 
 '*.resource' extension is accepted
     Run Libdoc And Parse Output       ${TESTDATADIR}/resource.resource
