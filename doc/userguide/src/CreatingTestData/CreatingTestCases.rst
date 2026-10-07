@@ -78,11 +78,14 @@ below and explained later in this section.
 `[Documentation]`:setting:
     Used for specifying a `test case documentation`_.
 
-`[Setup]`:setting:, `[Teardown]`:setting:
-   Specify `test setup and teardown`_.
-
 `[Tags]`:setting:
     Used for `tagging test cases`_.
+
+`[Metadata]`:setting:
+    Used for setting `free test metadata`_ as name-value pairs.
+
+`[Setup]`:setting:, `[Teardown]`:setting:
+   Specify `test setup and teardown`_.
 
 `[Template]`:setting:
    Specifies the `template keyword`_ to use. The test itself will contain only
@@ -233,7 +236,7 @@ The named argument syntax makes using arguments with `default values`_ more
 flexible, and allows explicitly labeling what a certain argument value means.
 Technically named arguments work exactly like `keyword arguments`__ in Python.
 
-__ http://docs.python.org/tutorial/controlflow.html#keyword-arguments
+__ https://docs.python.org/tutorial/controlflow.html#keyword-arguments
 
 Basic syntax
 ''''''''''''
@@ -373,7 +376,7 @@ visible literally. For example, both `foo=${bar}` and `${foo}=${bar}` are
 valid, as long as the variables that are used exist. An extra limitation is
 that free argument names must always be strings.
 
-__ http://docs.python.org/tutorial/controlflow.html#keyword-arguments
+__ https://docs.python.org/tutorial/controlflow.html#keyword-arguments
 __ `Where named arguments are supported`_
 __ `Free keyword arguments (**kwargs)`_
 __ `Free named arguments with user keywords`_
@@ -575,8 +578,43 @@ in that case they normally do not need any documentation. If the logic
 of the test case needs documenting, it is often a sign that keywords
 in the test case need better names and they are to be enhanced,
 instead of adding extra documentation. Finally, metadata, such as the
-environment and user information in the last example above, is often
-better specified using tags_.
+environment and user information in the last example above, can also
+be specified as `free test metadata`_ or using tags_, depending on the
+use case.
+
+Free test metadata
+------------------
+
+In addition to documentation, test cases can also have free metadata. This
+metadata is defined as name-value pairs using the :setting:`[Metadata]`
+setting in the test case, similarly as `free suite metadata`_ is defined
+for test suites.
+
+Name of the metadata is the first argument given to the :setting:`[Metadata]`
+setting and the remaining arguments specify its value. The value is handled
+similarly as `test case documentation`_, which means that it supports
+`HTML formatting`_ and variables_, and that longer values can be `split into
+multiple rows`__. A test case can have any number of :setting:`[Metadata]`
+settings, and each of them adds one name-value pair.
+
+__ `Dividing data to several rows`_
+
+.. sourcecode:: robotframework
+
+   *** Test Cases ***
+   Example
+       [Metadata]    Owner              John Doe
+       [Metadata]    Environment        Staging
+       [Metadata]    Longer Value
+       ...           Longer metadata values can be split into multiple
+       ...           rows. Also *simple* _formatting_ is supported.
+       No Operation
+
+Test metadata is shown in reports and logs similarly as test documentation.
+It is also stored in `output files`_ and is available to `listeners`_
+and other tools that process execution results.
+
+.. note:: Test case metadata is new in Robot Framework 7.5.
 
 .. _test case tags:
 
@@ -1168,8 +1206,8 @@ than one action.
        Then welcome page should be open
 
 __ https://en.wikipedia.org/wiki/Acceptance_test-driven_development
-__ http://en.wikipedia.org/wiki/Specification_by_example
-__ http://en.wikipedia.org/wiki/Behavior_Driven_Development
+__ https://en.wikipedia.org/wiki/Specification_by_example
+__ https://en.wikipedia.org/wiki/Behavior_Driven_Development
 
 Ignoring :name:`Given/When/Then/And/But` prefixes
 '''''''''''''''''''''''''''''''''''''''''''''''''

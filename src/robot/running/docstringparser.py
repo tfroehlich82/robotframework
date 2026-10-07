@@ -20,7 +20,7 @@ from inspect import cleandoc
 
 from robot.output import LOGGER
 
-__all__ = ["parse_docstring", "DocInfo"]
+__all__ = ["DocInfo", "parse_docstring"]
 
 
 @dataclass
@@ -152,7 +152,7 @@ class DocStringParser:
             else:
                 yield section
                 section = Block(body=[line])
-            can_start = section.name or not line.strip()
+            can_start = bool(section.name or not line.strip())
         yield section
 
     def _match_header(self, line: str, can_start: bool) -> "tuple[str|None, str|None]":
@@ -193,6 +193,8 @@ class DocStringParser:
                 yield name, doc
 
     def _normalize_name(self, name: str) -> str:
+        if name.startswith(("- ", "+ ", "* ")):
+            name = name[2:]
         if name.startswith("`"):
             name = name.strip("`").strip()
         if "(" in name:

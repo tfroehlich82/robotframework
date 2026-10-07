@@ -23,9 +23,31 @@ Automatic reference targets
     ...    and <a href="#type-list" title="&quot;list&quot; type">list</a>.
     ...    model=${MODEL}[keywords][2]
 
-Custom references defined in introduction work also with keywords
-    Custom references defined in introduction like <a href="http://example.com" title="An &quot;example&quot;!">reference</a> work too!
+Custom references defined globally and locally work in keyword docs
+    Custom references defined in introduction like <a href="http://example.com" title="An &quot;example&quot;!">reference</a> and locally
+    ...    like <a href="http://robotframework.org">local</a> work too!
     ...    model=${MODEL}[keywords][2]
+
+Links in argument docs
+    Arg with links to <a href="#Introduction" title="&quot;Introduction&quot; section">introduction</a> and <a href="#Admonitions" title="&quot;Admonitions&quot; keyword">Admonitions</a>.
+    ...    model=${MODEL}[keywords][2][args][0]
+    Arg with <a href="http://example.com" title="An &quot;example&quot;!">global</a> and <a href="http://robotframework.org">local</a> reference.
+    ...    model=${MODEL}[keywords][2][args][1]
+
+Links in return docs
+    Return with links to <a href="#Introduction" title="&quot;Introduction&quot; section">introduction</a> and <a href="#Admonitions" title="&quot;Admonitions&quot; keyword">Admonitions</a>
+    ...    and <a href="http://example.com" title="An &quot;example&quot;!">global</a> and <a href="http://robotframework.org">local</a> reference.
+    ...    model=${MODEL}[keywords][2][returnDoc]
+
+Links in exception docs
+    Error with links to <a href="#Introduction" title="&quot;Introduction&quot; section">introduction</a> and <a href="#Admonitions" title="&quot;Admonitions&quot; keyword">Admonitions</a>.
+    ...    model=${MODEL}[keywords][2][raises][E]
+    Error with <a href="http://example.com" title="An &quot;example&quot;!">global</a> and <a href="http://robotframework.org">local</a> reference.
+    ...    model=${MODEL}[keywords][2][raises][F]
+
+Local references do not work with other keywords
+    [local] references do not work with other keywords.
+    ...    model=${MODEL}[keywords][3]
 
 Unordered lists
     <ul>\n<li>First unordered item.</li>\n<li>Second item.</li>\n</ul>
@@ -85,7 +107,7 @@ Tables
     ...    </tr>
     ...    </tbody>
     ...    </table>
-    ...    model=${MODEL}[keywords][4]
+    ...    model=${MODEL}[keywords][5]
     <table>
     ...    <thead>
     ...    <tr>
@@ -102,31 +124,104 @@ Tables
     ...    </tr>
     ...    </tbody>
     ...    </table>
-    ...    model=${MODEL}[keywords][4]
+    ...    model=${MODEL}[keywords][5]
 
 Syntax highlighting
     <div class="code"><pre><span></span><code><span class="gh">*** Test Cases ***</span>
     ...    <span class="gu">Example</span>
     ...    <span class="p"> \ \ \ </span><span class="nf">Keyword</span><span class="p"> \ \ \ </span><span class="s">arg</span>
     ...    </code></pre></div>
-    ...    model=${MODEL}[keywords][3]
+    ...    model=${MODEL}[keywords][4]
     <span class="c1"># This is comment in code, not a Markdown header!</span>
-    ...    model=${MODEL}[keywords][3]
-    <div class="code"><pre><span></span><code><span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Fenced blocks are more commonly used.&quot;</span><span class="p">)</span>
-    ...    </code></pre></div>
-    ...    model=${MODEL}[keywords][3]
+    ...    model=${MODEL}[keywords][4]
+    <div class="code"><pre><span></span><code><span class="nb">print</span><span class="p">(</span><span class="s2">
+    ...    model=${MODEL}[keywords][4]
 
 Admonitions
     <div class="admonition note">
     ...    <p class="admonition-title">Note</p>
-    ...    <p>Admonitions are provided by the <code>admonition</code> plugin.</p>
-    ...    <p>We need to make sure to add custom styles to make them render nicely.</p>
+    ...    <p>We have our own plugin that supports GFM style admonitions.</p>
+    ...    </div>
+    ...    model=${MODEL}[keywords][0]
+    <div class="admonition tip">
+    ...    <p class="admonition-title">Tip</p>
+    ...    <p>There are five supported admonition types:</p>
+    ...    <ul>
+    ...    <li>note</li>
+    ...    <li>tip</li>
+    ...    <li>important</li>
+    ...    <li>warning</li>
+    ...    <li>caution</li>
+    ...    </ul>
+    ...    </div>
+    ...    model=${MODEL}[keywords][0]
+    <div class="admonition important">
+    ...    <p class="admonition-title">Important</p>
+    ...    <p>Admonitions are not standard Markdown.</p>
     ...    </div>
     ...    model=${MODEL}[keywords][0]
     <div class="admonition warning">
     ...    <p class="admonition-title">Interoperability risk!</p>
-    ...    <p>Admonitions are not standard Markdown. Don't use them if you want good
-    ...    interoperability with other Markdown tools.</p>
+    ...    <p>We support optional titles, but GFM does not.</p>
+    ...    </div>
+    ...    model=${MODEL}[keywords][0]
+    <div class="admonition caution">
+    ...    <p class="admonition-title">Caution</p>
+    ...    <p>Just kidding, you are safe.</p>
+    ...    </div>
+    ...    model=${MODEL}[keywords][0]
+    <div class="admonition unrecognized">
+    ...    <p class="admonition-title">Unrecognized</p>
+    ...    <p>We treat unrecognized types the same as <code>note</code>.
+    ...    GFM does not support them at all.</p>
+    ...    </div>
+    ...    model=${MODEL}[keywords][0]
+    <div class="admonition note">
+    ...    <p class="admonition-title">Nesting</p>
+    ...    <p>We support nested admonitions!</p>
+    ...    <div class="admonition warning">
+    ...    <p class="admonition-title">Warning</p>
+    ...    <p>GFM does not.</p>
+    ...    </div>
+    ...    <p>Back in NOTE level.</p>
+    ...    </div>
+    ...    model=${MODEL}[keywords][0]
+
+Admonitions can contain tables and indented code blocks
+    <div class="admonition tip">
+    ...    <p class="admonition-title">Other content</p>
+    ...    <p>Tables work:</p>
+    ...    <table>
+    ...    <thead>
+    ...    <tr>
+    ...    <th>Kind</th>
+    ...    <th>Works</th>
+    ...    </tr>
+    ...    </thead>
+    ...    <tbody>
+    ...    <tr>
+    ...    <td>Tables</td>
+    ...    <td>yes</td>
+    ...    </tr>
+    ...    <tr>
+    ...    <td>Indented code blocks</td>
+    ...    <td>yes</td>
+    ...    </tr>
+    ...    </tbody>
+    ...    </table>
+    ...    <p>And so do indented code blocks:</p>
+    ...    <div class="code"><pre><span></span><code>*** Test Cases ***
+    ...    Example
+    ...    \ \ \ \ Keyword
+    ...    </code></pre></div>
+    ...    model=${MODEL}[keywords][0]
+
+Fenced code blocks do not work inside admonitions
+    [Documentation]    Python-Markdown's Fenced Code Block plugin only
+    ...                supports fenced code blocks at the document root level.
+    <p>Fenced code blocks do not, because Python-Markdown's Fenced Code Block
+    ...    plugin only supports them at the document root level:</p>
+    ...    <p><code>Not a code block!</code></p>
     ...    </div>
     ...    model=${MODEL}[keywords][0]
 
@@ -144,7 +239,6 @@ Table of contents
     ...    <li><a href="#table-of-contents">Table of contents</a><ul>
     ...    <li><a href="#basics">Basics</a></li>
     ...    <li><a href="#included-header-levels">Included header levels</a></li>
-    ...    <li><a href="#differences-to-robot-format">Differences to Robot format</a></li>
     ...    </ul>
     ...    </li>
     ...    </ul>
@@ -163,7 +257,7 @@ Table of contents in keyword documentation
     ...    <li><a href="#where-to-learn-more">Where to learn more?</a></li>
     ...    </ul>
     ...    </div>
-    ...    model=${MODEL}[keywords][5]
+    ...    model=${MODEL}[keywords][6]
 
 *** Keywords ***
 Generate doc using Markdown source
@@ -172,4 +266,9 @@ Generate doc using Markdown source
 Doc should contain
     [Arguments]    @{content}    ${model}=${MODEL}
     VAR    ${content}    @{content}    separator=\n
-    Should Contain    ${model}[doc]    ${content}
+    IF    "doc" in $model
+        VAR    ${doc}    ${model}[doc]
+    ELSE
+        VAR    ${doc}    ${model}
+    END
+    Should Contain    ${doc}    ${content}

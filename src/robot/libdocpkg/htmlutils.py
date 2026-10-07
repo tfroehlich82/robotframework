@@ -23,7 +23,7 @@ from robot.utils import (
     attribute_escape, html_escape, html_format, NormalizedDict, validate_literal
 )
 from robot.utils.htmlformatters import HeaderFormatter
-from robot.utils.markdown import LinkifyExtension, Markdown
+from robot.utils.markdown import AdmonitionExtension, LinkifyExtension, Markdown
 
 if TYPE_CHECKING:
     from .model import KeywordDoc
@@ -34,7 +34,8 @@ except ImportError:
 
     def publish_parts(*args, **kwargs):
         raise DataError(
-            "reStructuredText format requires 'docutils' module to be installed."
+            "The 'docutils' module is required to convert reStructuredText "
+            "documentation to HTML."
         )
 
 
@@ -108,6 +109,9 @@ class DocFormatter:
     def html(self, doc: str) -> str:
         return self._doc_to_html(doc)
 
+    def reset(self):
+        self._doc_to_html.reset()
+
 
 class DocToHtml:
 
@@ -132,6 +136,11 @@ class DocToHtml:
     def __call__(self, doc: str) -> str:
         return self.formatter(doc)
 
+    def reset(self):
+        if self._md is not None:
+            self._md.reset()
+            self._md.references = self.targets.copy()
+
     def _format_robot(self, doc: str) -> str:
         toc = self._get_toc(doc) if "%TOC%" in doc else None
         doc = html_format(doc)
@@ -141,23 +150,25 @@ class DocToHtml:
         return self._handle_backtick_links(doc)
 
     def _get_toc(self, doc):
-        tokens = []
-        nested = []
         entries = re.findall(r"^\s*(={1,2})\s+(.+?)\s+\1\s*$", doc, flags=re.MULTILINE)
+        items = []
         for level, header in entries:
             if level == "=":
-                if nested:
-                    tokens.extend(self._toc_block(nested))
-                    nested = []
-                tokens.append(self._toc_item(header))
-            elif tokens:
-                nested.append(self._toc_item(header))
-        if nested:
-            tokens.extend(self._toc_block(nested))
-        return "\n".join(self._toc_block(tokens))
+                items.append((header, []))
+            elif items:
+                items[-1][1].append(header)
+        lines = []
+        for header, nested in items:
+            lines.extend(self._toc_item(header, nested))
+        return "\n".join(self._toc_block(lines))
 
-    def _toc_item(self, header):
-        return f'<li><a href="{fragment(header)}">{header}</a></li>'
+    def _toc_item(self, header, nested=()):
+        link = f'<a href="{fragment(header)}">{header}</a>'
+        if not nested:
+            return [f"<li>{link}</li>"]
+        # Nested list must be inside the item, not a sibling of it.
+        sub_items = [line for sub in nested for line in self._toc_item(sub)]
+        return [f"<li>{link}", *self._toc_block(sub_items), "</li>"]
 
     def _toc_block(self, items):
         return ["<ul>", *items, "</ul>"]
@@ -179,27 +190,28 @@ class DocToHtml:
 
     def _format_markdown(self, doc: str) -> str:
         if self._md is None:
-            self._md = md = Markdown(
+            self._md = Markdown(
                 extensions=[
-                    "admonition",
                     "codehilite",
                     "fenced_code",
                     "sane_lists",
                     "tables",
                     "toc",
+                    AdmonitionExtension(),
                     LinkifyExtension(),
                 ],
                 extension_configs={
-                    "codehilite": {"css_class": "code", "linenums": False},
                     "toc": {"baselevel": 2, "toc_depth": 3, "marker": "%TOC%"},
+                    "codehilite": {
+                        "css_class": "code",
+                        "linenums": False,
+                        "guess_lang": False,
+                    },
                 },
                 output_format="html",
             )
-        else:
-            md = self._md.reset()
-        # Initialize references and use NormalizedDict to make lookup case-insensitive.
-        md.references = self.targets.copy()
-        return md.convert(doc)
+            self._md.references = self.targets.copy()
+        return self._md.convert(doc)
 
     def _handle_backtick_links(self, doc: str) -> str:
         return re.sub("`(.+?)`", self._handle_names, doc)
